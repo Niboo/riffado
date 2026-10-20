@@ -4,7 +4,7 @@
 
 Dans la carte Transcription, « Split audio » prépare des morceaux de moins de vingt minutes. Les enregistrements Ogg/Opus sont découpés sans réencodage et conservés en `.ogg`, avec leurs canaux et leur qualité d’origine. Les autres formats conservent la conversion MP3 existante. Cette action ne contacte pas OpenAI. L’original est conservé. Les morceaux sont stockés dans le même stockage que les enregistrements (S3 ou disque local), indépendamment des fichiers temporaires de conversion.
 
-Chaque morceau possède son intervalle, un lecteur, un lien de téléchargement et un état. « Transcribe » prépare les morceaux si nécessaire lorsque le modèle utilise la diarisation OpenAI. Les autres fournisseurs gardent leur traitement actuel, exécuté en arrière-plan.
+Une barre compacte représente les morceaux, proportionnellement à leur durée. La couleur et une icône indiquent leur état. Le survol, le clic ou le clavier ouvrent les détails, l’erreur et le téléchargement ; le lecteur de l’original reste disponible. « Transcribe » prépare les morceaux si nécessaire lorsque le modèle utilise la diarisation OpenAI. Les autres fournisseurs gardent leur traitement actuel, exécuté en arrière-plan.
 
 Les transcriptions manuelles sont mises en file et rendent immédiatement une réponse HTTP 202. Le navigateur interroge l’état toutes les trois secondes. Il peut être fermé ou rafraîchi sans arrêter le travail serveur. Un seul traitement par utilisateur est pris en charge à la fois. Le worker traite un travail à la fois par processus pour limiter la charge.
 
@@ -32,4 +32,6 @@ Le changement couvre les transcriptions manuelles de l’interface et leur route
 
 Les tests d’intégration peuvent utiliser une base PostgreSQL de test isolée : `AUDIO_JOB_TEST_DB_SOCKET=/tmp/riffado-audio-test pnpm test src/tests/audio-jobs.integration.test.ts`. Le rôle est `riffado_test`, la base `postgres`, le port 55439. Le schéma de base doit être créé au préalable dans cette base vide ; le test recrée la table de travaux et efface les données de test. Ne jamais viser une base réelle.
 
-Le suivi de chaque morceau inclut son état, l’heure de début et de fin, le nombre de tentatives et une erreur exploitable en cas d’échec. Le morceau actif est identifié dans la liste ; les résultats terminés restent consultables pendant le reste du travail.
+Le suivi de chaque morceau inclut son état, l’heure de début et de fin, le nombre de tentatives et une erreur exploitable en cas d’échec. Le morceau actif est identifié dans la barre ; les résultats terminés restent consultables pendant le reste du travail.
+
+Les erreurs non classées conservent désormais un message détaillé limité à 600 caractères, avec masquage des URL et identifiants sensibles. Les anciennes erreurs déjà enregistrées ne peuvent pas être reconstituées : une nouvelle tentative est nécessaire. La coupe Opus inclut une marge de 50 ms pour éviter un morceau final parasite lié à l’alignement des paquets, sans réencodage ni suppression de paquets. Les morceaux déjà enregistrés ne sont pas modifiés.

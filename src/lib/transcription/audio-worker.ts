@@ -302,17 +302,31 @@ export function startAudioWorker(): void {
     void audioWorkerTick();
 }
 
-function audioFailureMessage(error: unknown): string {
+export function audioFailureMessage(error: unknown): string {
     const message = error instanceof Error ? error.message : "";
     if (/Remove saved MP3/i.test(message))
         return "Saved parts use MP3. Remove saved parts, then split the original Opus recording again.";
-    if (/unsupported|corrupted|audio.*format/i.test(message))
-        return "The provider rejected the audio format. No automatic conversion was attempted. Saved parts are preserved.";
     if (/timed? out|timeout/i.test(message))
         return "The transcription provider timed out. Completed parts are saved. Retry to resume from the first unfinished part.";
-    if (/API.*key|authentication|unauthori[sz]ed|401/i.test(message))
+    if (
+        /invalid[ _-]+api[ _-]?key|incorrect[ _-]+api[ _-]?key|authentication|unauthori[sz]ed|\b401\b/i.test(
+            message,
+        )
+    )
         return "The provider rejected the credentials. Check your provider settings, then resume.";
     if (/quota|billing|429|rate.limit/i.test(message))
         return "The provider quota or rate limit was reached. Check your provider account, then resume.";
-    return "Processing failed. Saved audio and completed parts are preserved. Retry to resume.";
+    const detail = message
+        .replace(/https?:\/\/[^\s]+/gi, "[URL removed]")
+        .replace(/(?:Bearer\s+|sk-)[a-zA-Z0-9_.-]+/gi, "[credential removed]")
+        .replace(
+            /((?:api[_-]?key|token|secret|password|authorization)\s*[=:]\s*)[^\s,;]+/gi,
+            "$1[redacted]",
+        )
+        .replace(/[a-zA-Z0-9_+/=-]{40,}/g, "[redacted]")
+        .replace(/[\r\n]+/g, " ")
+        .slice(0, 600);
+    return detail
+        ? `Processing failed: ${detail}. Saved parts are preserved.`
+        : "Processing failed without an error message. Saved parts are preserved.";
 }

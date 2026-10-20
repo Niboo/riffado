@@ -58,7 +58,24 @@ describe("audio parts controls", () => {
             screen.getByRole("button", { name: "Resume transcription" }),
         );
         expect(props.onRetry).toHaveBeenCalledOnce();
-        expect(screen.getAllByRole("link")).toHaveLength(2);
+        fireEvent.click(screen.getByLabelText(/Part 1 .*Transcribed/));
+        expect(
+            screen.getByRole("link", { name: "Download part 1" }),
+        ).toBeTruthy();
+        expect(document.querySelector("audio")).toBeNull();
+    });
+    it("opens part details on hover with its error and download action", () => {
+        render(<AudioPartsPanel {...props} job={job} />);
+        const trigger = screen.getByLabelText(/Part 2 .*Failed/);
+        const details = trigger.closest("details");
+        expect(details?.open).toBe(false);
+        fireEvent.mouseEnter(details as HTMLElement);
+        expect(details?.open).toBe(true);
+        expect(
+            screen.getByRole("link", { name: "Download part 2" }),
+        ).toBeTruthy();
+        fireEvent.keyDown(details as HTMLElement, { key: "Escape" });
+        expect(details?.open).toBe(false);
     });
     it("keeps destructive cleanup behind an explicit confirmation", () => {
         render(<AudioPartsPanel {...props} job={job} />);
@@ -96,7 +113,7 @@ describe("audio parts controls", () => {
         ).toBeTruthy();
         expect(
             screen
-                .getByText("Transcribing")
+                .getByLabelText(/Part 2 .*Transcribing/)
                 .closest("li")
                 ?.getAttribute("aria-current"),
         ).toBe("step");

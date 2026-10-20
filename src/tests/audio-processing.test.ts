@@ -47,6 +47,7 @@ vi.mock("@/lib/encryption/fields", () => ({
 }));
 
 import {
+    audioFailureMessage,
     persistentDiarization,
     prepareAudioParts,
     processAudioJob,
@@ -357,5 +358,32 @@ describe("persistent audio preparation and transcription", () => {
         expect(j.parts[1].error).toBeUndefined();
         expect(mock.create).toHaveBeenCalledTimes(3);
         log.mockRestore();
+    });
+});
+
+describe("audio failure diagnostics", () => {
+    it("retains actionable provider validation details", () => {
+        expect(
+            audioFailureMessage(
+                new Error(
+                    "400 audio duration 1483 seconds exceeds maximum 1400",
+                ),
+            ),
+        ).toContain("400 audio duration 1483 seconds exceeds maximum 1400");
+    });
+    it("redacts credentials and signed URLs from unknown errors", () => {
+        const message = audioFailureMessage(
+            new Error(
+                "400 invalid request api_key=never-expose token=private-token https://storage.example/audio?signature=secret sk-veryprivatecredential",
+            ),
+        );
+        for (const secret of [
+            "never-expose",
+            "private-token",
+            "storage.example",
+            "veryprivatecredential",
+        ])
+            expect(message).not.toContain(secret);
+        expect(message).toContain("400 invalid request");
     });
 });

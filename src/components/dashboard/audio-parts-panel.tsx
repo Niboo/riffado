@@ -63,8 +63,7 @@ export function AudioPartsPanel({
                 <div className="min-w-0 space-y-1">
                     <h3 className="text-sm font-medium">Audio parts</h3>
                     <p className="text-sm text-muted-foreground">
-                        Split into parts of up to 20 minutes. Saved separately
-                        from the original.
+                        Up to 20 minutes per part. Hover or select for details.
                     </p>
                 </div>
                 {(!job ||
@@ -137,12 +136,20 @@ export function AudioPartsPanel({
                 </div>
             )}
             {job && job.parts.length > 0 && (
-                <details open>
-                    <summary className="cursor-pointer text-sm font-medium py-1 focus-visible:outline-2 focus-visible:outline-ring">
-                        {job.parts.length} saved audio parts · view and listen
-                    </summary>
-                    <ol className="divide-y mt-2">
-                        {job.parts.map((part) => (
+                <ol
+                    aria-label="Saved audio parts"
+                    className="flex gap-1 rounded-md bg-muted p-1"
+                >
+                    {job.parts.map((part) => {
+                        const Icon =
+                            part.status === "completed"
+                                ? CheckCircle2
+                                : part.status === "failed"
+                                  ? AlertCircle
+                                  : part.status === "transcribing"
+                                    ? Loader2
+                                    : Circle;
+                        return (
                             <li
                                 key={part.index}
                                 aria-current={
@@ -150,91 +157,118 @@ export function AudioPartsPanel({
                                         ? "step"
                                         : undefined
                                 }
-                                className={`py-3 space-y-2 ${part.status === "transcribing" ? "bg-primary/5" : ""}`}
+                                className="relative min-w-0"
+                                style={{
+                                    flex: Math.max(
+                                        1,
+                                        part.endSeconds - part.startSeconds,
+                                    ),
+                                }}
                             >
-                                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                                    <span className="tabular-nums">
-                                        Part {part.index + 1} ·{" "}
-                                        {time(part.startSeconds)}–
-                                        {time(part.endSeconds)}
-                                    </span>
-                                    <span
-                                        className={`inline-flex items-center gap-1.5 ${part.status === "failed" ? "text-destructive" : part.status === "transcribing" ? "text-primary font-medium" : "text-muted-foreground"}`}
+                                <details
+                                    className="group"
+                                    onMouseEnter={(event) => {
+                                        event.currentTarget.open = true;
+                                    }}
+                                    onMouseLeave={(event) => {
+                                        if (
+                                            !event.currentTarget.contains(
+                                                document.activeElement,
+                                            )
+                                        )
+                                            event.currentTarget.open = false;
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (event.key === "Escape")
+                                            event.currentTarget.open = false;
+                                    }}
+                                >
+                                    <summary
+                                        aria-label={`Part ${part.index + 1} · ${time(part.startSeconds)}–${time(part.endSeconds)} · ${partLabels[part.status]}`}
+                                        className={`flex h-14 cursor-pointer list-none items-center justify-center gap-2 rounded px-2 text-xs font-medium tabular-nums focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden ${part.status === "failed" ? "bg-destructive text-white" : part.status === "completed" ? "bg-emerald-800 text-white dark:bg-emerald-900" : part.status === "transcribing" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground border"}`}
                                     >
-                                        {part.status === "transcribing" ? (
-                                            <Loader2
-                                                aria-hidden="true"
-                                                className="size-4 animate-spin motion-reduce:animate-none"
-                                            />
-                                        ) : part.status === "completed" ? (
-                                            <CheckCircle2
-                                                aria-hidden="true"
-                                                className="size-4"
-                                            />
-                                        ) : part.status === "failed" ? (
-                                            <AlertCircle
-                                                aria-hidden="true"
-                                                className="size-4"
-                                            />
-                                        ) : (
-                                            <Circle
-                                                aria-hidden="true"
-                                                className="size-4"
-                                            />
-                                        )}
-                                        {partLabels[part.status]}
-                                    </span>
-                                </div>
-                                {(part.startedAt || part.completedAt) && (
-                                    <p className="text-xs text-muted-foreground tabular-nums">
-                                        {part.status === "completed" &&
-                                        part.completedAt
-                                            ? `Completed at ${new Date(part.completedAt).toLocaleTimeString()}`
-                                            : part.startedAt
-                                              ? `Started at ${new Date(part.startedAt).toLocaleTimeString()}`
-                                              : ""}
-                                        {(part.attempts ?? 0) > 1
-                                            ? ` · attempt ${part.attempts}`
-                                            : ""}
-                                    </p>
-                                )}
-                                {part.error && (
-                                    <p className="text-sm text-destructive break-words">
-                                        {part.error}
-                                    </p>
-                                )}
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <audio
-                                        controls
-                                        preload="none"
-                                        className="h-9 min-w-0 w-full"
-                                        aria-label={`Listen to part ${part.index + 1}`}
-                                        src={`/api/recordings/${recordingId}/audio-parts/${part.index}`}
+                                        <Icon
+                                            aria-hidden="true"
+                                            className={`size-4 shrink-0 ${part.status === "transcribing" ? "animate-spin motion-reduce:animate-none" : ""}`}
+                                        />
+                                        <span className="truncate">
+                                            {part.index + 1}
+                                            <span className="hidden sm:inline">
+                                                {" "}
+                                                · {time(part.startSeconds)}–
+                                                {time(part.endSeconds)}
+                                            </span>
+                                        </span>
+                                    </summary>
+                                    <div
+                                        className="absolute top-full left-0 z-20 w-72 max-w-[75vw] rounded-md border bg-popover p-3 text-popover-foreground shadow-md space-y-2"
+                                        style={{
+                                            left:
+                                                part.index ===
+                                                job.parts.length - 1
+                                                    ? "auto"
+                                                    : 0,
+                                            right:
+                                                part.index ===
+                                                job.parts.length - 1
+                                                    ? 0
+                                                    : "auto",
+                                        }}
                                     >
-                                        <track kind="captions" />
-                                    </audio>
-                                    <a
-                                        className="shrink-0 rounded p-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-                                        href={`/api/recordings/${recordingId}/audio-parts/${part.index}?download=1`}
-                                        aria-label={`Download part ${part.index + 1}`}
-                                    >
-                                        <Download className="size-4" />
-                                    </a>
-                                </div>
-                                {part.text && (
-                                    <details>
-                                        <summary className="cursor-pointer text-sm text-muted-foreground">
-                                            View saved transcript
-                                        </summary>
-                                        <p className="text-sm whitespace-pre-wrap mt-2">
-                                            {part.text}
+                                        <p className="text-sm font-medium">
+                                            Part {part.index + 1} ·{" "}
+                                            {time(part.startSeconds)}–
+                                            {time(part.endSeconds)}
                                         </p>
-                                    </details>
-                                )}
+                                        <p className="text-xs text-muted-foreground">
+                                            {partLabels[part.status]} ·{" "}
+                                            {(part.bytes / 1024 / 1024).toFixed(
+                                                2,
+                                            )}{" "}
+                                            MB
+                                            {part.attempts
+                                                ? ` · attempt ${part.attempts}`
+                                                : ""}
+                                        </p>
+                                        {part.startedAt && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Started at{" "}
+                                                {new Date(
+                                                    part.startedAt,
+                                                ).toLocaleTimeString()}
+                                                {part.completedAt
+                                                    ? ` · completed at ${new Date(part.completedAt).toLocaleTimeString()}`
+                                                    : ""}
+                                            </p>
+                                        )}
+                                        {part.error && (
+                                            <p className="text-sm text-destructive break-words">
+                                                {part.error}
+                                            </p>
+                                        )}
+                                        <a
+                                            className="inline-flex min-h-9 items-center gap-2 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                                            href={`/api/recordings/${recordingId}/audio-parts/${part.index}?download=1`}
+                                        >
+                                            <Download className="size-4" />
+                                            Download part {part.index + 1}
+                                        </a>
+                                        {part.text && (
+                                            <details>
+                                                <summary className="cursor-pointer text-sm">
+                                                    View saved transcript
+                                                </summary>
+                                                <p className="max-h-48 overflow-auto whitespace-pre-wrap text-sm mt-2">
+                                                    {part.text}
+                                                </p>
+                                            </details>
+                                        )}
+                                    </div>
+                                </details>
                             </li>
-                        ))}
-                    </ol>
-                </details>
+                        );
+                    })}
+                </ol>
             )}
             {job &&
                 job.parts.length > 0 &&

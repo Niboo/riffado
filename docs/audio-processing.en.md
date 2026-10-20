@@ -4,7 +4,7 @@
 
 In the Transcription card, “Split audio” prepares parts shorter than twenty minutes. Ogg/Opus recordings are split without re-encoding and stored as `.ogg`, preserving channels and original encoding quality. Other formats retain the existing MP3 conversion path without calling OpenAI. The original is preserved. Parts live in the recording storage backend (S3 or local disk), independently of temporary conversion files.
 
-Each part has a time interval, audio player, download link and status. “Transcribe” prepares parts when needed for OpenAI diarization models. Other providers retain their existing processing path, now running in the background for manual requests.
+A compact bar shows parts proportionally to their duration. Color and icons indicate status. Hover, click or keyboard interaction reveals details, errors and downloads; the original recording player remains available. “Transcribe” prepares parts when needed for OpenAI diarization models. Other providers retain their existing processing path, now running in the background for manual requests.
 
 Manual transcription requests enqueue work and immediately return HTTP 202. The browser polls every three seconds. Closing or refreshing the page does not stop server processing. Only one job per user can run at a time. Each server process runs one job at a time to bound load.
 
@@ -32,4 +32,6 @@ This first step covers manual UI transcriptions and their internal endpoint. Dir
 
 Integration tests can use an isolated PostgreSQL test database: `AUDIO_JOB_TEST_DB_SOCKET=/tmp/riffado-audio-test pnpm test src/tests/audio-jobs.integration.test.ts`. They use role `riffado_test`, database `postgres`, port 55439. Create the base schema in an empty test database first. The test recreates the jobs table and clears test data. Never point it at a real database.
 
-Each part reports its status, start and completion time, attempt count and a useful failure message. The active part is highlighted in the list; completed results remain accessible while the remaining work runs.
+Each part reports its status, start and completion time, attempt count and a useful failure message. The active part is highlighted in the bar; completed results remain accessible while the remaining work runs.
+
+Unclassified failures retain a detailed message capped at 600 characters, with URLs and sensitive credentials redacted. Previously stored generic errors cannot be reconstructed; retry to capture a new diagnostic. Opus splitting includes a 50 ms boundary margin to avoid a tiny final part caused by packet alignment, without re-encoding or discarding packets. Previously saved parts remain unchanged.

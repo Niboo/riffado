@@ -50,7 +50,7 @@ describe.runIf(process.env.RIFFADO_TEST_FFMPEG === "1")(
             const parts = [];
             for await (const part of splitOpusSegments(original, 4))
                 parts.push(part);
-            expect(parts.length).toBeGreaterThanOrEqual(3);
+            expect(parts).toHaveLength(3);
             expect(parts.flatMap((part) => packets(part.buffer))).toEqual(
                 packets(original),
             );

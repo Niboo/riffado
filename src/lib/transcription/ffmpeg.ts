@@ -194,7 +194,7 @@ export async function* splitOpusSegments(
             "-segment_format",
             "ogg",
             "-segment_time",
-            segmentSeconds.toFixed(3),
+            (segmentSeconds + 0.05).toFixed(3),
             "-reset_timestamps",
             "1",
             join(workDir, "part-%06d.ogg"),
