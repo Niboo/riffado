@@ -77,6 +77,54 @@ describe("audio parts controls", () => {
         fireEvent.keyDown(details as HTMLElement, { key: "Escape" });
         expect(details?.open).toBe(false);
     });
+    it("closes hovered details on mouse leave even after the trigger was focused", () => {
+        render(<AudioPartsPanel {...props} job={job} />);
+        const trigger = screen.getByLabelText(/Part 2 .*Failed/);
+        const details = trigger.closest("details") as HTMLDetailsElement;
+        trigger.focus();
+        fireEvent.mouseEnter(details);
+        expect(details.open).toBe(true);
+        fireEvent.mouseLeave(details);
+        expect(details.open).toBe(false);
+    });
+    it("opens only one part at a time and closes when focus leaves", () => {
+        render(<AudioPartsPanel {...props} job={job} />);
+        const first = screen
+            .getByLabelText(/Part 1 .*Transcribed/)
+            .closest("details") as HTMLDetailsElement;
+        const second = screen
+            .getByLabelText(/Part 2 .*Failed/)
+            .closest("details") as HTMLDetailsElement;
+        fireEvent.mouseEnter(first);
+        fireEvent.mouseEnter(second);
+        expect(first.open).toBe(false);
+        expect(second.open).toBe(true);
+        fireEvent.blur(second, { relatedTarget: document.body });
+        expect(second.open).toBe(false);
+    });
+    it("keeps a minimum width and removes the icon for a tiny untranscribed part", () => {
+        render(
+            <AudioPartsPanel
+                {...props}
+                job={{
+                    ...job,
+                    parts: [
+                        ...job.parts,
+                        {
+                            index: 2,
+                            startSeconds: 2398,
+                            endSeconds: 2398.01,
+                            bytes: 20,
+                            status: "ready",
+                        },
+                    ],
+                }}
+            />,
+        );
+        const trigger = screen.getByLabelText(/Part 3 .*Ready to transcribe/);
+        expect(trigger.closest("li")?.className).toContain("min-w-24");
+        expect(trigger.querySelector("svg")).toBeNull();
+    });
     it("keeps destructive cleanup behind an explicit confirmation", () => {
         render(<AudioPartsPanel {...props} job={job} />);
         fireEvent.click(

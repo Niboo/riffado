@@ -3,7 +3,6 @@
 import {
     AlertCircle,
     CheckCircle2,
-    Circle,
     Download,
     Loader2,
     Scissors,
@@ -51,6 +50,7 @@ export function AudioPartsPanel({
     onRemove: () => void;
 }) {
     const [confirmRemove, setConfirmRemove] = useState(false);
+    const [openPart, setOpenPart] = useState<string | null>(null);
     const completed =
         job?.parts.filter((p) => p.status === "completed").length ?? 0;
     const current = job?.parts.find((p) => p.status === "transcribing");
@@ -138,7 +138,7 @@ export function AudioPartsPanel({
             {job && job.parts.length > 0 && (
                 <ol
                     aria-label="Saved audio parts"
-                    className="flex gap-1 rounded-md bg-muted p-1"
+                    className="flex flex-wrap gap-1 rounded-md bg-muted p-1"
                 >
                     {job.parts.map((part) => {
                         const Icon =
@@ -148,7 +148,8 @@ export function AudioPartsPanel({
                                   ? AlertCircle
                                   : part.status === "transcribing"
                                     ? Loader2
-                                    : Circle;
+                                    : null;
+                        const partKey = `${recordingId}:${part.index}`;
                         return (
                             <li
                                 key={part.index}
@@ -157,40 +158,58 @@ export function AudioPartsPanel({
                                         ? "step"
                                         : undefined
                                 }
-                                className="relative min-w-0"
+                                className="relative min-w-24"
                                 style={{
-                                    flex: Math.max(
+                                    flexGrow: Math.max(
                                         1,
                                         part.endSeconds - part.startSeconds,
                                     ),
+                                    flexBasis: "6rem",
                                 }}
                             >
                                 <details
                                     className="group"
-                                    onMouseEnter={(event) => {
-                                        event.currentTarget.open = true;
+                                    open={openPart === partKey}
+                                    onClick={(event) => {
+                                        if (
+                                            event.target instanceof Element &&
+                                            event.target.closest("summary") ===
+                                                event.currentTarget
+                                                    .firstElementChild
+                                        ) {
+                                            event.preventDefault();
+                                            setOpenPart(
+                                                openPart === partKey
+                                                    ? null
+                                                    : partKey,
+                                            );
+                                        }
                                     }}
-                                    onMouseLeave={(event) => {
+                                    onMouseEnter={() => setOpenPart(partKey)}
+                                    onMouseLeave={() => setOpenPart(null)}
+                                    onBlur={(event) => {
                                         if (
                                             !event.currentTarget.contains(
-                                                document.activeElement,
+                                                event.relatedTarget,
                                             )
                                         )
-                                            event.currentTarget.open = false;
+                                            setOpenPart(null);
                                     }}
                                     onKeyDown={(event) => {
                                         if (event.key === "Escape")
-                                            event.currentTarget.open = false;
+                                            setOpenPart(null);
                                     }}
                                 >
                                     <summary
                                         aria-label={`Part ${part.index + 1} · ${time(part.startSeconds)}–${time(part.endSeconds)} · ${partLabels[part.status]}`}
                                         className={`flex h-14 cursor-pointer list-none items-center justify-center gap-2 rounded px-2 text-xs font-medium tabular-nums focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden ${part.status === "failed" ? "bg-destructive text-white" : part.status === "completed" ? "bg-emerald-800 text-white dark:bg-emerald-900" : part.status === "transcribing" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground border"}`}
                                     >
-                                        <Icon
-                                            aria-hidden="true"
-                                            className={`size-4 shrink-0 ${part.status === "transcribing" ? "animate-spin motion-reduce:animate-none" : ""}`}
-                                        />
+                                        {Icon && (
+                                            <Icon
+                                                aria-hidden="true"
+                                                className={`size-4 shrink-0 ${part.status === "transcribing" ? "animate-spin motion-reduce:animate-none" : ""}`}
+                                            />
+                                        )}
                                         <span className="truncate">
                                             {part.index + 1}
                                             <span className="hidden sm:inline">
