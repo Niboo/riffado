@@ -78,11 +78,11 @@ import {
     POST as generateSummary,
     GET as getSummary,
 } from "@/app/api/recordings/[id]/summary/route";
-import { POST as transcribeRecordingRoute } from "@/app/api/recordings/[id]/transcribe/route";
 import { db } from "@/db";
 import { aiEnhancements, recordings, transcriptions } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { ErrorCode } from "@/lib/errors";
+import { transcribeRecording } from "@/lib/transcription/transcribe-recording";
 
 const userId = "user-79";
 const recordingId = "rec-79";
@@ -260,16 +260,12 @@ describe("Issue #79 - v1 incremental update timestamps", () => {
             ) => callback(tx),
         );
 
-        const response = await transcribeRecordingRoute(
-            routeRequest(`/api/recordings/${recordingId}/transcribe`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({}),
-            }),
-            routeParams(),
-        );
+        const result = await transcribeRecording(userId, recordingId, {
+            force: true,
+            trigger: "manual",
+        });
 
-        expect(response.status).toBe(200);
+        expect(result.success).toBe(true);
         expect(tx.update).toHaveBeenCalledWith(recordings);
         expect(recordingBumpSet).toHaveBeenCalledWith({
             updatedAt: expect.any(Date),

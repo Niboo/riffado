@@ -10,6 +10,7 @@ vi.mock("@/db/schema", () => ({
     recordings: "recordings",
     transcriptions: "transcriptions",
     aiEnhancements: "aiEnhancements",
+    audioJobs: "audioJobs",
 }));
 vi.mock("@/lib/encryption/fields", () => ({
     decryptText: (v: string | null) => (v == null ? v : `decrypted:${v}`),
@@ -324,4 +325,53 @@ describe("buildAndUploadExportArchive", () => {
 
         await expect(promise).rejects.toThrow(/abort/i);
     }, 5000);
+    it("exports durable parts and their completed transcripts even when the full transcription failed", async () => {
+        storage.files.set("original.mp3", Buffer.from("original"));
+        storage.files.set("part-0.mp3", Buffer.from("part-zero"));
+        mockSelectSequence([
+            [
+                {
+                    id: "rec-parts",
+                    userId: "user-1",
+                    filename: "meeting",
+                    startTime: new Date("2026-01-01"),
+                    endTime: new Date("2026-01-01"),
+                    duration: 1000,
+                    filesize: 8,
+                    deviceSn: "SN",
+                    storagePath: "original.mp3",
+                },
+            ],
+            [],
+            [],
+            [
+                {
+                    recordingId: "rec-parts",
+                    parts: [
+                        {
+                            index: 0,
+                            startSeconds: 0,
+                            endSeconds: 1,
+                            storageKey: "part-0.mp3",
+                            encryptedText: "saved-text",
+                        },
+                    ],
+                },
+            ],
+        ]);
+        await buildAndUploadExportArchive({
+            userId: "user-1",
+            storage,
+            storageKey: "export.zip",
+        });
+        const entries = await readZipEntries(storage.uploaded as Buffer);
+        const manifest = JSON.parse(
+            entries.get("manifest.json")?.buffer.toString("utf8") ?? "{}",
+        );
+        const part = manifest.recordings[0].audioParts[0];
+        expect(entries.get(part.path)?.buffer.toString()).toBe("part-zero");
+        expect(entries.get(part.transcript)?.buffer.toString()).toBe(
+            "decrypted:saved-text",
+        );
+    });
 });

@@ -1,6 +1,9 @@
 import type { OpenAI } from "openai";
 import type { TranscriptionDiarized } from "openai/resources/audio/transcriptions";
+import { buildAudioFile } from "@/lib/transcription/audio-file";
 import {
+    isOggOpus,
+    splitOpusSegments,
     transcodeToMp3,
     transcodeToMp3Segments,
 } from "@/lib/transcription/ffmpeg";
@@ -10,6 +13,24 @@ import { buildTranscriptionParams } from "@/lib/transcription/format";
 // margin for container timestamps and provider-side chunk boundary changes.
 const MAX_CHUNK_SECONDS = 20 * 60 - 1;
 
+export interface PreparedAudioSegment {
+    buffer?: Buffer;
+    index: number;
+    count: number;
+    startSeconds: number;
+    cachedText?: string;
+    contentType?: "audio/ogg" | "audio/mpeg";
+}
+
+export interface DiarizationPersistence {
+    segments(
+        audio: Buffer,
+        durationMs: number,
+        fingerprint: string,
+    ): AsyncIterable<PreparedAudioSegment>;
+    save(index: number, text: string): Promise<void>;
+}
+
 interface DiarizedTranscriptionOptions {
     client: OpenAI;
     model: string;
@@ -18,9 +39,11 @@ interface DiarizedTranscriptionOptions {
     filename: string;
     language?: string;
     timeoutMs: number;
+    persistence?: DiarizationPersistence;
+    fingerprint?: string;
 }
 
-/** Normalize and locally chunk audio before calling OpenAI's diarization API. */
+/** Prepare local chunks, preserving Opus, before OpenAI diarization. */
 export async function transcribeOpenAIDiarized(
     options: DiarizedTranscriptionOptions,
 ): Promise<{ text: string; detectedLanguage: null }> {
@@ -42,11 +65,13 @@ export async function transcribeOpenAIDiarized(
     const formattedTurns: string[] = [];
 
     const transcribeChunk = async (
-        mp3: Buffer,
+        buffer: Buffer,
         index: number,
         count: number,
+        offset = index * chunkDuration,
+        contentType: "audio/ogg" | "audio/mpeg" = "audio/mpeg",
     ) => {
-        const file = buildMp3File(mp3, filename, index, count);
+        const file = buildPartFile(buffer, filename, index, count, contentType);
         const response = await client.audio.transcriptions.create(
             buildTranscriptionParams({
                 file,
@@ -57,17 +82,56 @@ export async function transcribeOpenAIDiarized(
             { timeout: timeoutMs },
         );
         const diarized = response as TranscriptionDiarized;
-        formattedTurns.push(
-            ...formatDiarizedResponse(
-                diarized,
-                index,
-                count,
-                index * chunkDuration,
-            ),
-        );
+        if (!Array.isArray(diarized.segments))
+            throw new Error("OpenAI returned an invalid diarized response");
+        const text = formatDiarizedResponse(
+            diarized,
+            index,
+            count,
+            offset,
+        ).join("\n\n");
+        await options.persistence?.save(index, text);
+        formattedTurns.push(text);
     };
 
-    if (chunkCount === 1) {
+    if (options.persistence) {
+        for await (const part of options.persistence.segments(
+            audioBuffer,
+            durationMs,
+            options.fingerprint ?? model,
+        )) {
+            if (part.cachedText !== undefined) {
+                formattedTurns.push(part.cachedText);
+            } else if (part.buffer) {
+                await transcribeChunk(
+                    part.buffer,
+                    part.index,
+                    part.count,
+                    part.startSeconds,
+                    part.contentType,
+                );
+            } else {
+                throw new Error("Prepared audio part is missing");
+            }
+        }
+    } else if (isOggOpus(audioBuffer)) {
+        if (chunkCount === 1) {
+            await transcribeChunk(audioBuffer, 0, 1, 0, "audio/ogg");
+        } else {
+            for await (const segment of splitOpusSegments(
+                audioBuffer,
+                chunkDuration,
+            )) {
+                await transcribeChunk(
+                    segment.buffer,
+                    segment.index,
+                    segment.count,
+                    segment.startSeconds,
+                    "audio/ogg",
+                );
+            }
+        }
+    } else if (chunkCount === 1) {
         await transcribeChunk(await transcodeToMp3(audioBuffer), 0, 1);
     } else {
         for await (const segment of transcodeToMp3Segments(
@@ -84,20 +148,21 @@ export async function transcribeOpenAIDiarized(
     };
 }
 
-function buildMp3File(
+function buildPartFile(
     buffer: Buffer,
     filename: string,
     index: number,
     chunkCount: number,
+    contentType: "audio/ogg" | "audio/mpeg",
 ): File {
     const stem = filename.replace(/\.[^.]+$/, "");
     const suffix = chunkCount > 1 ? `-part-${index + 1}` : "";
-    const view = new Uint8Array(
-        buffer.buffer as ArrayBuffer,
-        buffer.byteOffset,
-        buffer.byteLength,
-    );
-    return new File([view], `${stem}${suffix}.mp3`, { type: "audio/mpeg" });
+    const extension = contentType === "audio/ogg" ? "ogg" : "mp3";
+    return buildAudioFile(
+        buffer,
+        `part.${extension}`,
+        `${stem}${suffix}.${extension}`,
+    ).file;
 }
 
 function formatDiarizedResponse(

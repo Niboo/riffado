@@ -128,3 +128,9 @@ AGPL-3.0 — see [LICENSE](LICENSE). Free to use, modify, and self-host. If you 
 ## Acknowledgments
 
 Originally created by **Perier**. Maintained by the Riffado community.
+
+## Niboo fork
+
+`master` is the Niboo integration branch. `main` is reserved for the original project's code. Feature branches start from `master`. The fork’s Docker workflow publishes `ghcr.io/niboo/riffado:dev` from `master`; stable tags remain versioned. Creating the remote branch and changing GitHub’s default branch are separate publication steps.
+
+Audio preparation and durable manual transcription: [Français](docs/audio-processing.fr.md) · [English](docs/audio-processing.en.md).

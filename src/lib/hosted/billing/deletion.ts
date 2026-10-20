@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
+import { revokeAudioJobsForDeletion } from "@/db/queries/audio-jobs";
 import {
     claimUsersDueForDeletion,
     deleteUser,
@@ -41,7 +42,10 @@ export async function deleteUserAccount(userId: string): Promise<{
         .limit(1);
     const capturedEmail = emailRow?.email ?? null;
 
-    const paths = await listRecordingStoragePaths(userId);
+    const paths = [
+        ...(await listRecordingStoragePaths(userId)),
+        ...(await revokeAudioJobsForDeletion(userId)),
+    ];
     const storage = createStorageProvider();
 
     let storageErrors = 0;

@@ -1,5 +1,13 @@
 # Branching & Release Model
 
+## Niboo fork
+
+The Niboo fork uses `master` as its primary integration branch. `main` is reserved for upstream synchronization. Feature branches start from `master`. CI and Docker publication run on `master`; its rolling image is `ghcr.io/niboo/riffado:dev`. Remote branch creation and GitHub default-branch configuration require a separately authorized push.
+
+The release tooling described below is inherited from upstream and still targets `main`. Do not run it for a Niboo release until it has been adapted to `master`.
+
+## Upstream model
+
 Riffado uses a **rolling-trunk + tagged-release** model. Self-hosters consume releases, not branches.
 
 ## Branches

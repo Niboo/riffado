@@ -1,11 +1,3 @@
-/**
- * Regression: issue #291
- *
- * Plaud Ogg/Opus recordings can be rejected by OpenAI's diarization model even
- * when the container is valid, and the provider rejects any generated chunk
- * longer than 1,400 seconds. Riffado now normalizes diarization input to MP3
- * and splits long recordings into balanced chunks of at most 20 minutes.
- */
 import type { OpenAI } from "openai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,8 +9,13 @@ const { transcodeToMp3, transcodeToMp3Segments } = vi.hoisted(() => ({
 vi.mock("@/lib/transcription/ffmpeg", () => ({
     transcodeToMp3,
     transcodeToMp3Segments,
+    isOggOpus: (input: Buffer) =>
+        input.subarray(0, 4).toString() === "OggS" &&
+        input.includes(Buffer.from("OpusHead")),
+    splitOpusSegments: vi.fn(),
 }));
 
+import { splitOpusSegments } from "@/lib/transcription/ffmpeg";
 import { transcribeOpenAIDiarized } from "@/lib/transcription/openai-diarized-transcribe";
 
 describe("issue #291 — OpenAI diarization audio preparation", () => {
@@ -128,6 +125,64 @@ describe("issue #291 — OpenAI diarization audio preparation", () => {
         expect(transcodeToMp3Segments).toHaveBeenCalledOnce();
         expect(transcodeToMp3Segments.mock.calls[0]?.[1]).toBeLessThan(20 * 60);
         expect(create).toHaveBeenCalledTimes(4);
+    });
+
+    it("sends a short Plaud Opus recording unchanged, even with a misleading mp3 filename", async () => {
+        const original = Buffer.from("OggS-opus-header-OpusHead-audio");
+        create.mockResolvedValue({ segments: [] });
+        await transcribeOpenAIDiarized({
+            client,
+            model: "gpt-4o-transcribe-diarize",
+            audioBuffer: original,
+            durationMs: 60000,
+            filename: "plaud.mp3",
+            timeoutMs: 10000,
+        });
+        const file = create.mock.calls[0][0].file as File;
+        expect(file.name).toBe("plaud.ogg");
+        expect(file.type).toBe("audio/ogg");
+        expect(Buffer.from(await file.arrayBuffer())).toEqual(original);
+        expect(transcodeToMp3).not.toHaveBeenCalled();
+        expect(transcodeToMp3Segments).not.toHaveBeenCalled();
+    });
+
+    it("sends copied Opus parts with correct names, MIME types and time offsets", async () => {
+        const part = Buffer.from("OggS-OpusHead-part");
+        vi.mocked(splitOpusSegments).mockReturnValue(
+            (async function* () {
+                yield {
+                    buffer: part,
+                    index: 0,
+                    count: 2,
+                    startSeconds: 0,
+                    durationSeconds: 742,
+                };
+                yield {
+                    buffer: part,
+                    index: 1,
+                    count: 2,
+                    startSeconds: 742,
+                    durationSeconds: 742,
+                };
+            })(),
+        );
+        create.mockResolvedValue({
+            segments: [{ speaker: "A", start: 0, text: "Words" }],
+        });
+        const result = await transcribeOpenAIDiarized({
+            client,
+            model: "gpt-4o-transcribe-diarize",
+            audioBuffer: part,
+            durationMs: 1484000,
+            filename: "plaud.mp3",
+            timeoutMs: 10000,
+        });
+        expect(create.mock.calls[0][0].file).toMatchObject({
+            name: "plaud-part-1.ogg",
+            type: "audio/ogg",
+        });
+        expect(result.text).toContain("[12:22]");
+        expect(transcodeToMp3Segments).not.toHaveBeenCalled();
     });
 
     function mockSegments(buffers: Buffer[]) {

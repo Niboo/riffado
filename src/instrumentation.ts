@@ -84,6 +84,12 @@ export async function register() {
         require("./lib/export/worker") as ExportWorkerModule;
     startExportWorker();
 
+    const { startAudioWorker } =
+        require("./lib/transcription/audio-worker") as {
+            startAudioWorker: () => void;
+        };
+    startAudioWorker();
+
     // Catch anything that escapes a background worker's own try/catch (or
     // any other unexpected process-level throw) instead of only ever
     // hitting the container log. Both no-op on self-host (no PostHog

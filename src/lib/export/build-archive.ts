@@ -2,9 +2,15 @@ import { PassThrough, type Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { aiEnhancements, recordings, transcriptions } from "@/db/schema";
+import {
+    aiEnhancements,
+    audioJobs,
+    recordings,
+    transcriptions,
+} from "@/db/schema";
 import { decryptJsonField, decryptText } from "@/lib/encryption/fields";
 import type { StorageProvider } from "@/lib/storage/types";
+import { audioPartFormat } from "@/types/audio-processing";
 
 export interface ArchiveResult {
     recordingCount: number;
@@ -22,6 +28,13 @@ interface ManifestRecording {
     audio: { included: boolean; path: string | null; reason?: string };
     transcript: { included: boolean; path: string | null };
     summary: { included: boolean; path: string | null };
+    audioParts?: Array<{
+        index: number;
+        startSeconds: number;
+        endSeconds: number;
+        path: string;
+        transcript: string | null;
+    }>;
 }
 
 function audioExtension(storagePath: string): string {
@@ -108,6 +121,17 @@ export async function buildAndUploadExportArchive(input: {
         ]),
     );
 
+    const savedAudioJobs =
+        recordingIds.length > 0
+            ? await db
+                  .select()
+                  .from(audioJobs)
+                  .where(eq(audioJobs.userId, userId))
+            : [];
+    const partsMap = new Map(
+        savedAudioJobs.map((job) => [job.recordingId, job.parts]),
+    );
+
     const archive = new ZipArchive({ zlib: { level: 6 } });
     const passthrough = new PassThrough();
     // Count bytes as they flow through rather than re-reading the
@@ -182,185 +206,239 @@ export async function buildAndUploadExportArchive(input: {
     // rather than an optimistic guess made before the stream ran.
     const audioSettled: Promise<void>[] = [];
 
-    for (const recording of userRecordings) {
-        // Per-recording DB/metadata work has no byte-stream progress of
-        // its own to trigger the passthrough listener above -- mark
-        // forward progress explicitly so a library with many small
-        // (or audio-less) recordings doesn't false-positive a stall
-        // while it's genuinely working through the list.
-        onProgress?.();
-        const folder = folderName(recording);
-        const entry: ManifestRecording = {
-            id: recording.id,
-            filename: decryptText(recording.filename),
-            startTime: recording.startTime.toISOString(),
-            endTime: recording.endTime.toISOString(),
-            duration: recording.duration,
-            filesize: recording.filesize,
-            deviceSn: recording.deviceSn,
-            audio: { included: false, path: null },
-            transcript: { included: false, path: null },
-            summary: { included: false, path: null },
-        };
+    try {
+        for (const recording of userRecordings) {
+            // Per-recording DB/metadata work has no byte-stream progress of
+            // its own to trigger the passthrough listener above -- mark
+            // forward progress explicitly so a library with many small
+            // (or audio-less) recordings doesn't false-positive a stall
+            // while it's genuinely working through the list.
+            onProgress?.();
+            const folder = folderName(recording);
+            const entry: ManifestRecording = {
+                id: recording.id,
+                filename: decryptText(recording.filename),
+                startTime: recording.startTime.toISOString(),
+                endTime: recording.endTime.toISOString(),
+                duration: recording.duration,
+                filesize: recording.filesize,
+                deviceSn: recording.deviceSn,
+                audio: { included: false, path: null },
+                transcript: { included: false, path: null },
+                summary: { included: false, path: null },
+            };
 
-        const audioExists = await storage
-            .exists(recording.storagePath)
-            .catch(() => false);
-        if (audioExists) {
-            try {
-                const rawStream = await storage.downloadStream(
-                    recording.storagePath,
-                );
-                const audioPath = `${folder}/audio.${audioExtension(recording.storagePath)}`;
+            const audioExists = await storage
+                .exists(recording.storagePath)
+                .catch(() => false);
+            if (audioExists) {
+                try {
+                    const rawStream = await storage.downloadStream(
+                        recording.storagePath,
+                    );
+                    const audioPath = `${folder}/audio.${audioExtension(recording.storagePath)}`;
 
-                // Proxy the raw storage stream through our own PassThrough
-                // instead of appending it to the archive directly. A
-                // mid-stream error on the raw stream (network drop,
-                // storage hiccup) would otherwise surface as an archiver
-                // `error` event and abort the *entire* archive -- the
-                // try/catch above only covers stream *creation*, not
-                // errors emitted while archiver is draining it. Ending
-                // the proxy gracefully on such an error instead leaves
-                // this one entry truncated (or empty) while every other
-                // recording still makes it into the archive.
-                const proxy = new PassThrough();
-                const settled = new Promise<void>((resolve) => {
-                    let done = false;
-                    const finish = () => {
-                        if (done) return;
-                        done = true;
-                        resolve();
-                    };
-                    rawStream.once("error", (err) => {
-                        entry.audio = {
-                            included: false,
-                            path: null,
-                            reason: `Audio stream interrupted: ${err instanceof Error ? err.message : String(err)}`,
+                    // Proxy the raw storage stream through our own PassThrough
+                    // instead of appending it to the archive directly. A
+                    // mid-stream error on the raw stream (network drop,
+                    // storage hiccup) would otherwise surface as an archiver
+                    // `error` event and abort the *entire* archive -- the
+                    // try/catch above only covers stream *creation*, not
+                    // errors emitted while archiver is draining it. Ending
+                    // the proxy gracefully on such an error instead leaves
+                    // this one entry truncated (or empty) while every other
+                    // recording still makes it into the archive.
+                    const proxy = new PassThrough();
+                    const settled = new Promise<void>((resolve) => {
+                        let done = false;
+                        const finish = () => {
+                            if (done) return;
+                            done = true;
+                            resolve();
                         };
-                        // Gracefully end the proxy instead of letting the
-                        // error propagate into archiver -- archiver treats
-                        // a source-stream error as fatal to the whole
-                        // archive. Ending early just truncates this one
-                        // entry.
-                        proxy.end();
-                        finish();
+                        rawStream.once("error", (err) => {
+                            entry.audio = {
+                                included: false,
+                                path: null,
+                                reason: `Audio stream interrupted: ${err instanceof Error ? err.message : String(err)}`,
+                            };
+                            // Gracefully end the proxy instead of letting the
+                            // error propagate into archiver -- archiver treats
+                            // a source-stream error as fatal to the whole
+                            // archive. Ending early just truncates this one
+                            // entry.
+                            proxy.end();
+                            finish();
+                        });
+                        proxy.once("error", finish);
+                        proxy.once("close", finish);
+                        proxy.once("end", finish);
                     });
-                    proxy.once("error", finish);
-                    proxy.once("close", finish);
-                    proxy.once("end", finish);
-                });
-                audioSettled.push(settled);
-                activeAudioStreams.push({ rawStream, proxy });
-                rawStream.pipe(proxy);
+                    audioSettled.push(settled);
+                    activeAudioStreams.push({ rawStream, proxy });
+                    rawStream.pipe(proxy);
 
-                // Audio is already compressed (mp3/opus/etc.) -- deflating
-                // it again wastes CPU for near-zero size benefit. `store:
-                // true` writes it uncompressed into the zip.
-                archive.append(proxy, { name: audioPath, store: true });
-                entry.audio = { included: true, path: audioPath };
-            } catch (error) {
+                    // Audio is already compressed (mp3/opus/etc.) -- deflating
+                    // it again wastes CPU for near-zero size benefit. `store:
+                    // true` writes it uncompressed into the zip.
+                    archive.append(proxy, { name: audioPath, store: true });
+                    entry.audio = { included: true, path: audioPath };
+                } catch (error) {
+                    entry.audio = {
+                        included: false,
+                        path: null,
+                        reason:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    };
+                }
+            } else {
                 entry.audio = {
                     included: false,
                     path: null,
-                    reason:
-                        error instanceof Error ? error.message : String(error),
+                    reason: "Audio file not found in storage",
                 };
             }
-        } else {
-            entry.audio = {
-                included: false,
-                path: null,
-                reason: "Audio file not found in storage",
-            };
-        }
 
-        const transcriptText = transcriptionMap.get(recording.id);
-        if (transcriptText) {
-            const transcriptPath = `${folder}/transcript.txt`;
-            archive.append(Buffer.from(transcriptText, "utf-8"), {
-                name: transcriptPath,
-            });
-            entry.transcript = { included: true, path: transcriptPath };
-        }
+            const transcriptText = transcriptionMap.get(recording.id);
+            if (transcriptText) {
+                const transcriptPath = `${folder}/transcript.txt`;
+                archive.append(Buffer.from(transcriptText, "utf-8"), {
+                    name: transcriptPath,
+                });
+                entry.transcript = { included: true, path: transcriptPath };
+            }
 
-        const enhancement = enhancementMap.get(recording.id);
-        if (enhancement) {
-            const summaryPath = `${folder}/summary.json`;
-            archive.append(
-                Buffer.from(
-                    JSON.stringify(
-                        {
-                            summary: enhancement.summary,
-                            actionItems: enhancement.actionItems,
-                            keyPoints: enhancement.keyPoints,
-                            provider: enhancement.provider,
-                            model: enhancement.model,
-                            createdAt: enhancement.createdAt.toISOString(),
-                        },
-                        null,
-                        2,
+            const enhancement = enhancementMap.get(recording.id);
+            if (enhancement) {
+                const summaryPath = `${folder}/summary.json`;
+                archive.append(
+                    Buffer.from(
+                        JSON.stringify(
+                            {
+                                summary: enhancement.summary,
+                                actionItems: enhancement.actionItems,
+                                keyPoints: enhancement.keyPoints,
+                                provider: enhancement.provider,
+                                model: enhancement.model,
+                                createdAt: enhancement.createdAt.toISOString(),
+                            },
+                            null,
+                            2,
+                        ),
                     ),
-                ),
-                { name: summaryPath },
-            );
-            entry.summary = { included: true, path: summaryPath };
+                    { name: summaryPath },
+                );
+                entry.summary = { included: true, path: summaryPath };
+            }
+
+            const parts = partsMap.get(recording.id);
+            if (parts?.length) {
+                entry.audioParts = [];
+                for (const part of parts) {
+                    const partPath = `${folder}/parts/part-${part.index + 1}.${audioPartFormat(part).extension}`;
+                    const partStream = await storage.downloadStream(
+                        part.storageKey,
+                    );
+                    partStream.on("error", (error) =>
+                        passthrough.destroy(error),
+                    );
+                    const proxy = new PassThrough();
+                    activeAudioStreams.push({ rawStream: partStream, proxy });
+                    const partSettled = new Promise<void>((resolve, reject) => {
+                        partStream.once("error", reject);
+                        proxy.once("end", resolve);
+                        proxy.once("error", reject);
+                    });
+                    partSettled.catch(() => {});
+                    audioSettled.push(partSettled);
+                    partStream.pipe(proxy);
+                    archive.append(proxy, { name: partPath, store: true });
+                    const partText =
+                        part.encryptedText === undefined
+                            ? null
+                            : decryptText(part.encryptedText);
+                    const textPath =
+                        partText === null
+                            ? null
+                            : `${folder}/parts/part-${part.index + 1}.txt`;
+                    if (textPath)
+                        archive.append(Buffer.from(partText ?? "", "utf-8"), {
+                            name: textPath,
+                        });
+                    entry.audioParts.push({
+                        index: part.index,
+                        startSeconds: part.startSeconds,
+                        endSeconds: part.endSeconds,
+                        path: partPath,
+                        transcript: textPath,
+                    });
+                }
+            }
+            manifest.recordings.push(entry);
         }
 
-        manifest.recordings.push(entry);
-    }
-
-    // Wait for every audio entry to actually settle (archiver finished
-    // draining it, or it errored and was gracefully truncated) before
-    // serializing the manifest, so `entry.audio` reflects reality
-    // instead of the optimistic guess made when the stream was appended.
-    //
-    // Raced against `signal` rather than awaited bare: if an abort
-    // fires while this is pending, `onAbort` destroys the in-flight
-    // audio streams above, but there's still a window where archiver
-    // itself has simply stopped draining a stream without formally
-    // ending it. Without this race, that would hang here forever
-    // instead of rejecting -- defeating the whole point of the worker's
-    // stall/max-duration guard, which needs this promise to actually
-    // settle to stop the job.
-    await new Promise<void>((resolve, reject) => {
-        let settled = false;
-        const onAbortWhileWaiting = () => {
-            if (settled) return;
-            settled = true;
-            reject(
-                new Error(
-                    "Export aborted while waiting for audio entries to settle",
-                ),
+        // Wait for every audio entry to actually settle (archiver finished
+        // draining it, or it errored and was gracefully truncated) before
+        // serializing the manifest, so `entry.audio` reflects reality
+        // instead of the optimistic guess made when the stream was appended.
+        //
+        // Raced against `signal` rather than awaited bare: if an abort
+        // fires while this is pending, `onAbort` destroys the in-flight
+        // audio streams above, but there's still a window where archiver
+        // itself has simply stopped draining a stream without formally
+        // ending it. Without this race, that would hang here forever
+        // instead of rejecting -- defeating the whole point of the worker's
+        // stall/max-duration guard, which needs this promise to actually
+        // settle to stop the job.
+        await new Promise<void>((resolve, reject) => {
+            let settled = false;
+            const onAbortWhileWaiting = () => {
+                if (settled) return;
+                settled = true;
+                reject(
+                    new Error(
+                        "Export aborted while waiting for audio entries to settle",
+                    ),
+                );
+            };
+            if (signal?.aborted) {
+                onAbortWhileWaiting();
+                return;
+            }
+            signal?.addEventListener("abort", onAbortWhileWaiting, {
+                once: true,
+            });
+            Promise.all(audioSettled).then(
+                () => {
+                    if (settled) return;
+                    settled = true;
+                    signal?.removeEventListener("abort", onAbortWhileWaiting);
+                    resolve();
+                },
+                (err) => {
+                    if (settled) return;
+                    settled = true;
+                    signal?.removeEventListener("abort", onAbortWhileWaiting);
+                    reject(err);
+                },
             );
-        };
-        if (signal?.aborted) {
-            onAbortWhileWaiting();
-            return;
-        }
-        signal?.addEventListener("abort", onAbortWhileWaiting, { once: true });
-        Promise.all(audioSettled).then(
-            () => {
-                if (settled) return;
-                settled = true;
-                signal?.removeEventListener("abort", onAbortWhileWaiting);
-                resolve();
-            },
-            (err) => {
-                if (settled) return;
-                settled = true;
-                signal?.removeEventListener("abort", onAbortWhileWaiting);
-                reject(err);
-            },
-        );
-    });
+        });
 
-    archive.append(Buffer.from(JSON.stringify(manifest, null, 2)), {
-        name: "manifest.json",
-    });
+        archive.append(Buffer.from(JSON.stringify(manifest, null, 2)), {
+            name: "manifest.json",
+        });
 
-    try {
         await archive.finalize();
         await uploadPromise;
+    } catch (error) {
+        archive.abort();
+        passthrough.destroy(
+            error instanceof Error ? error : new Error("Export failed"),
+        );
+        await uploadPromise.catch(() => {});
+        throw error;
     } finally {
         signal?.removeEventListener("abort", onAbort);
     }

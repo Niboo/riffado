@@ -17,6 +17,7 @@ import {
     varchar,
 } from "drizzle-orm/pg-core";
 import { nanoid } from "nanoid";
+import type { AudioJobStatus, AudioPart } from "@/types/audio-processing";
 
 export const userPlanEnum = pgEnum("user_plan", [
     "self_host",
@@ -1027,5 +1028,49 @@ export const emailLog = pgTable(
             table.userId,
             table.kind,
         ),
+    }),
+);
+
+export const audioJobs = pgTable(
+    "audio_jobs",
+    {
+        id: text("id")
+            .primaryKey()
+            .$defaultFn(() => nanoid()),
+        userId: text("user_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        recordingId: text("recording_id")
+            .notNull()
+            .references(() => recordings.id, { onDelete: "cascade" }),
+        action: text("action").$type<"split" | "transcribe">().notNull(),
+        status: text("status")
+            .$type<AudioJobStatus>()
+            .notNull()
+            .default("queued"),
+        parts: jsonb("parts").$type<AudioPart[]>().notNull().default([]),
+        splitComplete: boolean("split_complete").notNull().default(false),
+        sourceVersion: text("source_version").notNull(),
+        providerId: text("provider_id"),
+        model: text("model"),
+        transcriptFingerprint: text("transcript_fingerprint"),
+        error: text("error"),
+        claimToken: text("claim_token"),
+        leaseUntil: timestamp("lease_until"),
+        createdAt: timestamp("created_at").notNull().defaultNow(),
+        updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    },
+    (table) => ({
+        recordingUnique: uniqueIndex("audio_jobs_recording_user_unique").on(
+            table.recordingId,
+            table.userId,
+        ),
+        queueIdx: index("audio_jobs_queue_idx").on(
+            table.status,
+            table.updatedAt,
+        ),
+        userRunningUnique: uniqueIndex("audio_jobs_user_running_unique")
+            .on(table.userId)
+            .where(sql`${table.status} in ('splitting', 'transcribing')`),
     }),
 );

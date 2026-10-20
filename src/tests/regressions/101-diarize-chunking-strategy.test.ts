@@ -165,6 +165,7 @@ vi.mock("@/lib/plaud/client-factory", () => ({
 }));
 
 vi.mock("@/lib/transcription/ffmpeg", () => ({
+    isOggOpus: vi.fn().mockReturnValue(false),
     transcodeToMp3: vi.fn().mockResolvedValue(Buffer.from("fake-mp3-bytes")),
     transcodeToMp3Segments: vi.fn(() =>
         (async function* () {

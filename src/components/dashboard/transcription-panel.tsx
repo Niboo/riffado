@@ -12,6 +12,7 @@ import {
     Trash2,
 } from "lucide-react";
 import { useState } from "react";
+import { AudioPartsPanel } from "@/components/dashboard/audio-parts-panel";
 import { TranscribeInBrowserButton } from "@/components/dashboard/transcribe-in-browser-button";
 import {
     RichMarkdown,
@@ -26,6 +27,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { useAudioJob } from "@/hooks/use-audio-job";
 import { useTranscriptionSummary } from "@/hooks/use-transcription-summary";
 import type { Recording } from "@/types/recording";
 
@@ -66,10 +68,15 @@ export function TranscriptionPanel({
     recording,
     transcription,
     transcripts,
-    isTranscribing,
+    isTranscribing: requestedTranscribing,
     onTranscribe,
     onTranscribeComplete,
 }: TranscriptionPanelProps) {
+    const audioJob = useAudioJob(recording.id, onTranscribeComplete);
+    const isTranscribing =
+        requestedTranscribing ||
+        (audioJob.busy && audioJob.job?.action === "transcribe");
+    const actionDisabled = isTranscribing || audioJob.busy;
     const transcriptList: TranscriptOption[] =
         transcripts && transcripts.length > 0
             ? transcripts
@@ -121,7 +128,7 @@ export function TranscriptionPanel({
                                     onClick={onTranscribe}
                                     size="sm"
                                     variant="outline"
-                                    disabled={isTranscribing}
+                                    disabled={actionDisabled}
                                 >
                                     <RefreshCw className="size-4 mr-2" />
                                     Re-transcribe
@@ -132,14 +139,14 @@ export function TranscriptionPanel({
                                     <Button
                                         onClick={onTranscribe}
                                         size="sm"
-                                        disabled={isTranscribing}
+                                        disabled={actionDisabled}
                                     >
                                         <Sparkles className="size-4 mr-2" />
                                         Transcribe
                                     </Button>
                                     <TranscribeInBrowserButton
                                         recordingId={recording.id}
-                                        disabled={isTranscribing}
+                                        disabled={actionDisabled}
                                         onComplete={
                                             // Falling back to `onTranscribe` here
                                             // would kick off a redundant SERVER
@@ -158,11 +165,22 @@ export function TranscriptionPanel({
                     </div>
                 </CardHeader>
                 <CardContent>
+                    <AudioPartsPanel
+                        key={recording.id}
+                        recordingId={recording.id}
+                        job={audioJob.job}
+                        busy={audioJob.busy || requestedTranscribing}
+                        error={audioJob.error}
+                        onSplit={audioJob.split}
+                        onRetry={onTranscribe}
+                        onRemove={audioJob.remove}
+                    />
                     {isTranscribing ? (
                         <div className="flex flex-col items-center justify-center py-12">
                             <div className="animate-spin size-8 border-2 border-primary border-t-transparent rounded-full mb-4" />
                             <p className="text-sm text-muted-foreground">
-                                Transcribing audio…
+                                Transcription is running on the server. Progress
+                                is shown above.
                             </p>
                         </div>
                     ) : activeTranscript?.text ? (

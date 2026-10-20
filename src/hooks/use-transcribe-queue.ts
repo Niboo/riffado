@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { type AudioJobView, isAudioJobActive } from "@/types/audio-processing";
 
 type ActionKind = "transcribing" | "summarizing";
 
@@ -23,6 +24,13 @@ interface Options {
  * same map without duplicating the Map-update plumbing.
  */
 export function useTranscribeQueue({ onTranscribeComplete }: Options) {
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        };
+    }, []);
     const [inFlightActions, setInFlightActions] = useState<
         Map<string, ActionKind>
     >(new Map());
@@ -53,7 +61,38 @@ export function useTranscribeQueue({ onTranscribeComplete }: Options) {
                     `/api/recordings/${id}/transcribe`,
                     { method: "POST" },
                 );
-                if (response.ok) {
+                if (response.status === 202) {
+                    let { job }: { job: AudioJobView } = await response.json();
+                    while (mounted.current && isAudioJobActive(job.status)) {
+                        await new Promise((resolve) =>
+                            setTimeout(resolve, 3000),
+                        );
+                        if (!mounted.current) return;
+                        const poll = await fetch(
+                            `/api/recordings/${id}/audio-parts`,
+                            { cache: "no-store" },
+                        );
+                        if (!poll.ok)
+                            throw new Error(
+                                "Could not check transcription progress",
+                            );
+                        const data: { job: AudioJobView | null } =
+                            await poll.json();
+                        if (!data.job)
+                            throw new Error("Transcription job not found");
+                        job = data.job;
+                    }
+                    if (!mounted.current) return;
+                    if (job.status === "failed") {
+                        toast.error(
+                            job.error ??
+                                "Transcription failed. Saved parts are preserved.",
+                        );
+                        return;
+                    }
+                    toast.success("Transcription complete");
+                    onTranscribeComplete();
+                } else if (response.ok) {
                     toast.success("Transcription complete");
                     onTranscribeComplete();
                 } else {

@@ -9,6 +9,7 @@ const { dbMock, emailMock, envMock, queriesMock, storageMock } = vi.hoisted(
             claimUsersDueForDeletion: vi.fn(),
             listRecordingStoragePaths: vi.fn(),
             deleteUser: vi.fn(),
+            revokeAudioJobsForDeletion: vi.fn().mockResolvedValue([]),
         },
         storageMock: {
             deleteFile: vi.fn(),
@@ -20,6 +21,9 @@ vi.mock("@/db", () => ({ db: dbMock }));
 vi.mock("@/db/schema", () => ({ users: { id: "id", email: "email" } }));
 vi.mock("@/lib/env", () => ({ env: envMock }));
 vi.mock("@/db/queries/billing", () => queriesMock);
+vi.mock("@/db/queries/audio-jobs", () => ({
+    revokeAudioJobsForDeletion: queriesMock.revokeAudioJobsForDeletion,
+}));
 vi.mock("@/lib/notifications/email", () => emailMock);
 vi.mock("@/lib/storage/factory", () => ({
     createStorageProvider: () => storageMock,
@@ -43,6 +47,7 @@ import {
 describe("deleteUserAccount", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        queriesMock.revokeAudioJobsForDeletion.mockResolvedValue([]);
         emailMock.sendAccountDeletedEmail.mockResolvedValue(true);
         stubEmailLookup("default@example.com");
     });
@@ -65,6 +70,19 @@ describe("deleteUserAccount", () => {
             "users/u1/a.opus",
         );
         expect(queriesMock.deleteUser).toHaveBeenCalledWith("u1");
+    });
+
+    it("also deletes durable audio parts when deleting an account", async () => {
+        queriesMock.listRecordingStoragePaths.mockResolvedValue(["original"]);
+        queriesMock.revokeAudioJobsForDeletion.mockResolvedValue([
+            "part-one",
+            "part-two",
+        ]);
+        await deleteUserAccount("u1");
+        expect(queriesMock.revokeAudioJobsForDeletion).toHaveBeenCalledWith(
+            "u1",
+        );
+        expect(storageMock.deleteFile).toHaveBeenCalledWith("part-two");
     });
 
     it("continues past per-object storage errors and still deletes the user row", async () => {
@@ -106,6 +124,7 @@ describe("deleteUserAccount", () => {
 describe("processDueAccountDeletions", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        queriesMock.revokeAudioJobsForDeletion.mockResolvedValue([]);
         emailMock.sendAccountDeletedEmail.mockResolvedValue(true);
         stubEmailLookup("default@example.com");
     });

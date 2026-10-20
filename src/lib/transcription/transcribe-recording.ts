@@ -49,7 +49,10 @@ import {
 } from "@/lib/transcription/format";
 import { geminiTranscribe } from "@/lib/transcription/gemini-transcribe";
 import { isRiffadoIncludedProviderId } from "@/lib/transcription/included-provider";
-import { transcribeOpenAIDiarized } from "@/lib/transcription/openai-diarized-transcribe";
+import {
+    type DiarizationPersistence,
+    transcribeOpenAIDiarized,
+} from "@/lib/transcription/openai-diarized-transcribe";
 import { upsertTranscription } from "@/lib/transcription/persist";
 import { emitEvent } from "@/lib/webhooks/emit";
 
@@ -216,6 +219,8 @@ export async function storeBrowserTranscription(
 }
 
 export interface TranscribeOptions {
+    diarizationPersistence?: DiarizationPersistence;
+    assertActive?: () => Promise<void>;
     /** Use a specific provider (by id, user-scoped) instead of the user's default. */
     providerId?: string;
     /** Override the provider's default model for this single call. */
@@ -520,6 +525,11 @@ async function transcribeRecordingInner(
                         apiKey,
                         baseURL: credentials.baseUrl || undefined,
                         timeout: env.WHISPER_REQUEST_TIMEOUT_MS,
+                        maxRetries: 0,
+                        fetchOptions: {
+                            timeout: false,
+                            cache: "no-store",
+                        } as { timeout: false; cache: "no-store" },
                     });
 
                     if (transcriptionStyle === "chat") {
@@ -540,6 +550,13 @@ async function transcribeRecordingInner(
                                 client: openai,
                                 model,
                                 audioBuffer,
+                                persistence: opts.diarizationPersistence,
+                                fingerprint: JSON.stringify([
+                                    credentials.id,
+                                    credentials.baseUrl,
+                                    model,
+                                    defaultLanguage,
+                                ]),
                                 durationMs: recording.duration,
                                 filename: decryptedFilename,
                                 language: defaultLanguage,
@@ -599,6 +616,7 @@ async function transcribeRecordingInner(
         // tombstone-aware, source-scoped upsert. The persisted model is the
         // *actual* model used (may differ from the provider default when the
         // manual route supplied an override).
+        await opts.assertActive?.();
         const { committed } = await upsertTranscription({
             userId,
             recordingId,
