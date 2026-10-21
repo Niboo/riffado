@@ -3,6 +3,7 @@
 import {
     ChevronDown,
     ChevronUp,
+    Download,
     FileText,
     Languages,
     ListChecks,
@@ -28,6 +29,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { useTranscriptionSummary } from "@/hooks/use-transcription-summary";
+import { downloadTranscript } from "@/lib/transcription/download-transcript";
 import type { Recording } from "@/types/recording";
 
 interface Transcription {
@@ -128,6 +130,21 @@ export function TranscriptionPanel({
                                 disabled={isTranscribing || processingBusy}
                                 onPendingChange={setLanguagePending}
                             />
+                            {activeTranscript?.text && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                        downloadTranscript(
+                                            activeTranscript.text,
+                                            recording.filename,
+                                        )
+                                    }
+                                >
+                                    <Download className="size-4 mr-2" />
+                                    Download transcript
+                                </Button>
+                            )}
                             {activeTranscript?.text && (
                                 <Button
                                     onClick={onTranscribe}

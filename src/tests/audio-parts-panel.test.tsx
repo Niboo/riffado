@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+    cleanup,
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AudioPartsPanel } from "@/components/dashboard/audio-parts-panel";
 import type { AudioJobView } from "@/types/audio-processing";
@@ -51,9 +57,9 @@ describe("audio parts controls", () => {
     });
     it("shows saved intervals, partial results and a resume action after failure", () => {
         render(<AudioPartsPanel {...props} job={job} />);
-        expect(screen.getByText("Part 1 · 0:00–19:59")).toBeTruthy();
-        expect(screen.queryByText("Saved words")).toBeNull();
+        fireEvent.click(screen.getByLabelText(/Part 2 .*Failed/));
         expect(screen.getByText("OpenAI timed out on this part.")).toBeTruthy();
+        expect(screen.queryByText("Saved words")).toBeNull();
         fireEvent.click(
             screen.getByRole("button", { name: "Resume transcription" }),
         );
@@ -95,43 +101,54 @@ describe("audio parts controls", () => {
         });
         expect(screen.getByText(/Estimated total .*0.200 USD/)).toBeTruthy();
     });
-    it("opens part details on hover with its error and download action", () => {
-        render(<AudioPartsPanel {...props} job={job} />);
+    it("renders hover details outside the clipping card and closes on Escape", () => {
+        const { container } = render(
+            <div className="overflow-hidden">
+                <AudioPartsPanel {...props} job={job} />
+            </div>,
+        );
         const trigger = screen.getByLabelText(/Part 2 .*Failed/);
-        const details = trigger.closest("details");
-        expect(details?.open).toBe(false);
-        fireEvent.mouseEnter(details as HTMLElement);
-        expect(details?.open).toBe(true);
+        fireEvent.mouseEnter(trigger);
+        const popover = screen.getByRole("dialog", {
+            name: "Details for part 2",
+        });
+        expect(container.contains(popover)).toBe(false);
         expect(
             screen.getByRole("link", { name: "Download part 2" }),
         ).toBeTruthy();
-        fireEvent.keyDown(details as HTMLElement, { key: "Escape" });
-        expect(details?.open).toBe(false);
+        fireEvent.keyDown(popover, { key: "Escape" });
+        expect(screen.queryByRole("dialog")).toBeNull();
     });
-    it("closes hovered details on mouse leave even after the trigger was focused", () => {
+    it("closes hovered details after mouse leave even if the trigger was focused", async () => {
         render(<AudioPartsPanel {...props} job={job} />);
         const trigger = screen.getByLabelText(/Part 2 .*Failed/);
-        const details = trigger.closest("details") as HTMLDetailsElement;
         trigger.focus();
-        fireEvent.mouseEnter(details);
-        expect(details.open).toBe(true);
-        fireEvent.mouseLeave(details);
-        expect(details.open).toBe(false);
+        fireEvent.mouseEnter(trigger);
+        expect(trigger.getAttribute("aria-expanded")).toBe("true");
+        fireEvent.mouseLeave(trigger);
+        await waitFor(() =>
+            expect(trigger.getAttribute("aria-expanded")).toBe("false"),
+        );
     });
-    it("opens only one part at a time and closes when focus leaves", () => {
+    it("keeps details open while moving from the trigger into the portal, with only one part open", async () => {
         render(<AudioPartsPanel {...props} job={job} />);
-        const first = screen
-            .getByLabelText(/Part 1 .*Transcribed/)
-            .closest("details") as HTMLDetailsElement;
-        const second = screen
-            .getByLabelText(/Part 2 .*Failed/)
-            .closest("details") as HTMLDetailsElement;
+        const first = screen.getByLabelText(/Part 1 .*Transcribed/);
+        const second = screen.getByLabelText(/Part 2 .*Failed/);
         fireEvent.mouseEnter(first);
+        fireEvent.mouseLeave(first);
+        fireEvent.mouseEnter(
+            screen.getByRole("dialog", { name: "Details for part 1" }),
+        );
+        expect(first.getAttribute("aria-expanded")).toBe("true");
         fireEvent.mouseEnter(second);
-        expect(first.open).toBe(false);
-        expect(second.open).toBe(true);
-        fireEvent.blur(second, { relatedTarget: document.body });
-        expect(second.open).toBe(false);
+        expect(first.getAttribute("aria-expanded")).toBe("false");
+        expect(second.getAttribute("aria-expanded")).toBe("true");
+        fireEvent.mouseLeave(
+            screen.getByRole("dialog", { name: "Details for part 2" }),
+        );
+        await waitFor(() =>
+            expect(second.getAttribute("aria-expanded")).toBe("false"),
+        );
     });
     it("keeps a minimum width and removes the icon for a tiny untranscribed part", () => {
         render(
@@ -155,6 +172,12 @@ describe("audio parts controls", () => {
         const trigger = screen.getByLabelText(/Part 3 .*Ready to transcribe/);
         expect(trigger.closest("li")?.className).toContain("min-w-24");
         expect(trigger.querySelector("svg")).toBeNull();
+        expect(trigger.textContent).toContain("< 1 s");
+        expect(
+            screen.getByText(
+                /saved split contains a very short final fragment/,
+            ),
+        ).toBeTruthy();
     });
     it("keeps destructive cleanup behind an explicit confirmation", () => {
         render(<AudioPartsPanel {...props} job={job} />);

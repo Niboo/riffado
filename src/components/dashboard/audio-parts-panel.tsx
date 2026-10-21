@@ -8,7 +8,8 @@ import {
     Scissors,
     Trash2,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { Popover } from "radix-ui";
+import { useEffect, useId, useRef, useState } from "react";
 import { SpeakerTranscript } from "@/components/recordings/rich-content";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +63,15 @@ export function AudioPartsPanel({
     onRemove: () => void;
 }) {
     const rateId = useId();
+    const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+        undefined,
+    );
+    useEffect(() => () => clearTimeout(closeTimer.current), []);
+    const cancelClose = () => clearTimeout(closeTimer.current);
+    const closeSoon = () => {
+        cancelClose();
+        closeTimer.current = setTimeout(() => setOpenPart(null), 150);
+    };
     const [rate, setRate] = useState("0.006");
     const [transcriptPart, setTranscriptPart] = useState<number | null>(null);
     const activePart = job?.parts.find((part) => part.index === transcriptPart);
@@ -194,155 +204,180 @@ export function AudioPartsPanel({
                                     flexBasis: "6rem",
                                 }}
                             >
-                                <details
-                                    className="group"
+                                <Popover.Root
                                     open={openPart === partKey}
-                                    onClick={(event) => {
-                                        if (
-                                            event.target instanceof Element &&
-                                            event.target.closest("summary") ===
-                                                event.currentTarget
-                                                    .firstElementChild
-                                        ) {
-                                            event.preventDefault();
-                                            setOpenPart(
-                                                openPart === partKey
-                                                    ? null
-                                                    : partKey,
-                                            );
-                                        }
-                                    }}
-                                    onMouseEnter={() => setOpenPart(partKey)}
-                                    onMouseLeave={() => setOpenPart(null)}
-                                    onBlur={(event) => {
-                                        if (
-                                            !event.currentTarget.contains(
-                                                event.relatedTarget,
-                                            )
-                                        )
-                                            setOpenPart(null);
-                                    }}
-                                    onKeyDown={(event) => {
-                                        if (event.key === "Escape")
-                                            setOpenPart(null);
+                                    onOpenChange={(open) => {
+                                        cancelClose();
+                                        setOpenPart(open ? partKey : null);
                                     }}
                                 >
-                                    <summary
-                                        aria-label={`Part ${part.index + 1} · ${time(part.startSeconds)}–${time(part.endSeconds)} · ${partLabels[part.status]}`}
-                                        className={`flex h-14 cursor-pointer list-none items-center justify-center gap-2 rounded px-2 text-xs font-medium tabular-nums focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden ${part.status === "failed" ? "bg-destructive text-white" : part.status === "completed" ? "bg-emerald-800 text-white dark:bg-emerald-900" : part.status === "transcribing" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground border"}`}
-                                    >
-                                        {Icon && (
-                                            <Icon
-                                                aria-hidden="true"
-                                                className={`size-4 shrink-0 ${part.status === "transcribing" ? "animate-spin motion-reduce:animate-none" : ""}`}
-                                            />
-                                        )}
-                                        <span className="flex min-w-0 flex-col items-start gap-0.5">
-                                            <span>Part {part.index + 1}</span>
-                                            <span className="truncate text-[11px] font-normal">
-                                                {time(
-                                                    part.endSeconds -
-                                                        part.startSeconds,
-                                                )}
+                                    <Popover.Trigger asChild>
+                                        <button
+                                            type="button"
+                                            onMouseEnter={() => {
+                                                cancelClose();
+                                                setOpenPart(partKey);
+                                            }}
+                                            onMouseLeave={closeSoon}
+                                            onClick={(event) => {
+                                                event.preventDefault();
+                                                cancelClose();
+                                                setOpenPart(partKey);
+                                            }}
+                                            aria-label={`Part ${part.index + 1} · ${time(part.startSeconds)}–${time(part.endSeconds)} · ${partLabels[part.status]}`}
+                                            className={`flex w-full h-14 cursor-pointer list-none items-center justify-center gap-2 rounded px-2 text-xs font-medium tabular-nums focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden ${part.status === "failed" ? "bg-destructive text-white" : part.status === "completed" ? "bg-teal-100 text-teal-950 dark:bg-teal-950 dark:text-teal-200 border border-teal-200 dark:border-teal-800" : part.status === "transcribing" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground border"}`}
+                                        >
+                                            {Icon && (
+                                                <Icon
+                                                    aria-hidden="true"
+                                                    className={`size-4 shrink-0 ${part.status === "transcribing" ? "animate-spin motion-reduce:animate-none" : ""}`}
+                                                />
+                                            )}
+                                            <span className="flex min-w-0 flex-col items-start gap-0.5">
+                                                <span>
+                                                    Part {part.index + 1}
+                                                </span>
+                                                <span className="truncate text-[11px] font-normal">
+                                                    {part.endSeconds -
+                                                        part.startSeconds <
+                                                    1
+                                                        ? "< 1 s"
+                                                        : time(
+                                                              part.endSeconds -
+                                                                  part.startSeconds,
+                                                          )}
+                                                </span>
                                             </span>
-                                        </span>
-                                    </summary>
-                                    <div
-                                        className="absolute top-full left-0 z-20 w-72 max-w-[75vw] rounded-md border bg-popover p-3 text-popover-foreground shadow-md space-y-2"
-                                        style={{
-                                            left:
-                                                part.index ===
-                                                job.parts.length - 1
-                                                    ? "auto"
-                                                    : 0,
-                                            right:
-                                                part.index ===
-                                                job.parts.length - 1
-                                                    ? 0
-                                                    : "auto",
-                                        }}
-                                    >
-                                        <p className="text-sm font-medium">
-                                            Part {part.index + 1} ·{" "}
-                                            {time(part.startSeconds)}–
-                                            {time(part.endSeconds)}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {partLabels[part.status]} ·{" "}
-                                            {(part.bytes / 1024 / 1024).toFixed(
-                                                2,
-                                            )}{" "}
-                                            MB
-                                            {part.attempts
-                                                ? ` · attempt ${part.attempts}`
-                                                : ""}
-                                        </p>
-                                        {part.startedAt && (
+                                        </button>
+                                    </Popover.Trigger>
+                                    <Popover.Portal>
+                                        <Popover.Content
+                                            side="bottom"
+                                            align="start"
+                                            sideOffset={6}
+                                            collisionPadding={12}
+                                            onOpenAutoFocus={(event) =>
+                                                event.preventDefault()
+                                            }
+                                            onCloseAutoFocus={(event) =>
+                                                event.preventDefault()
+                                            }
+                                            onMouseEnter={cancelClose}
+                                            onMouseLeave={closeSoon}
+                                            aria-label={`Details for part ${part.index + 1}`}
+                                            className="z-40 w-72 max-w-[calc(100vw-1.5rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-md border bg-popover p-3 text-popover-foreground shadow-md space-y-2"
+                                        >
+                                            <p className="text-sm font-medium">
+                                                Part {part.index + 1} ·{" "}
+                                                {time(part.startSeconds)}–
+                                                {time(part.endSeconds)}
+                                            </p>
                                             <p className="text-xs text-muted-foreground">
-                                                Started at{" "}
-                                                {new Date(
-                                                    part.startedAt,
-                                                ).toLocaleTimeString()}
-                                                {part.completedAt
-                                                    ? ` · completed at ${new Date(part.completedAt).toLocaleTimeString()}`
+                                                {partLabels[part.status]} ·{" "}
+                                                {(
+                                                    part.bytes /
+                                                    1024 /
+                                                    1024
+                                                ).toFixed(2)}{" "}
+                                                MB
+                                                {part.attempts
+                                                    ? ` · attempt ${part.attempts}`
                                                     : ""}
                                             </p>
-                                        )}
-                                        {audioProcessingSeconds(part) !==
-                                            null && (
-                                            <p className="text-xs text-muted-foreground">
-                                                Processing time:{" "}
-                                                {time(
-                                                    audioProcessingSeconds(
-                                                        part,
-                                                    ) ?? 0,
-                                                )}
-                                            </p>
-                                        )}
-                                        {numericRate !== null && (
-                                            <p className="text-xs text-muted-foreground">
-                                                Estimated cost (one pass): $
-                                                {estimatedAudioCost(
-                                                    part.endSeconds -
-                                                        part.startSeconds,
-                                                    numericRate,
-                                                ).toFixed(4)}
-                                            </p>
-                                        )}
-                                        {part.error && (
-                                            <p className="text-sm text-destructive break-words">
-                                                {part.error}
-                                            </p>
-                                        )}
-                                        <a
-                                            className="inline-flex min-h-9 items-center gap-2 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
-                                            href={`/api/recordings/${recordingId}/audio-parts/${part.index}?download=1`}
-                                        >
-                                            <Download className="size-4" />
-                                            Download part {part.index + 1}
-                                        </a>
-                                        {part.text && (
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => {
-                                                    setTranscriptPart(
-                                                        part.index,
-                                                    );
-                                                    setOpenPart(null);
-                                                }}
+                                            {part.startedAt && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Started at{" "}
+                                                    {new Date(
+                                                        part.startedAt,
+                                                    ).toLocaleTimeString()}
+                                                    {part.completedAt
+                                                        ? ` · completed at ${new Date(part.completedAt).toLocaleTimeString()}`
+                                                        : ""}
+                                                </p>
+                                            )}
+                                            {audioProcessingSeconds(part) !==
+                                                null && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Processing time:{" "}
+                                                    {time(
+                                                        audioProcessingSeconds(
+                                                            part,
+                                                        ) ?? 0,
+                                                    )}
+                                                </p>
+                                            )}
+                                            {numericRate !== null && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Estimated cost (one pass): $
+                                                    {estimatedAudioCost(
+                                                        part.endSeconds -
+                                                            part.startSeconds,
+                                                        numericRate,
+                                                    ).toFixed(4)}
+                                                </p>
+                                            )}
+                                            {part.endSeconds -
+                                                part.startSeconds <
+                                                1 && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Very short audio fragment (
+                                                    {(
+                                                        (part.endSeconds -
+                                                            part.startSeconds) *
+                                                        1000
+                                                    ).toFixed(0)}{" "}
+                                                    ms), preserved with the
+                                                    saved split.
+                                                </p>
+                                            )}
+                                            {part.error && (
+                                                <p className="text-sm text-destructive break-words">
+                                                    {part.error}
+                                                </p>
+                                            )}
+                                            <a
+                                                className="inline-flex min-h-9 items-center gap-2 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                                                href={`/api/recordings/${recordingId}/audio-parts/${part.index}?download=1`}
                                             >
-                                                Open transcript for part{" "}
-                                                {part.index + 1}
-                                            </Button>
-                                        )}
-                                    </div>
-                                </details>
+                                                <Download className="size-4" />
+                                                Download part {part.index + 1}
+                                            </a>
+                                            {part.text && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        setTranscriptPart(
+                                                            part.index,
+                                                        );
+                                                        setOpenPart(null);
+                                                    }}
+                                                >
+                                                    Open transcript for part{" "}
+                                                    {part.index + 1}
+                                                </Button>
+                                            )}
+                                        </Popover.Content>
+                                    </Popover.Portal>
+                                </Popover.Root>
                             </li>
                         );
                     })}
                 </ol>
             )}
+            {job &&
+                job.parts.length > 1 &&
+                job.parts.at(-1) &&
+                (job.parts.at(-1)?.endSeconds ?? 0) -
+                    (job.parts.at(-1)?.startSeconds ?? 0) <
+                    1 && (
+                    <p className="text-xs text-muted-foreground">
+                        The saved split contains a very short final fragment.
+                        Re-transcribing reuses it. To rebuild the split, remove
+                        saved parts, then split the original again. The original
+                        and full transcript are kept.
+                    </p>
+                )}
             {job && job.parts.length > 0 && (
                 <div className="space-y-2 text-xs text-muted-foreground">
                     <p>

@@ -2,7 +2,7 @@
 
 ## Using it
 
-In the Transcription card, “Split audio” prepares parts shorter than twenty minutes. Ogg/Opus recordings are split without re-encoding and stored as `.ogg`, preserving channels and original encoding quality. Other formats retain the existing MP3 conversion path without calling OpenAI. The original is preserved. Parts live in the recording storage backend (S3 or local disk), independently of temporary conversion files.
+In the player’s Audio processing section, “Split audio” prepares parts shorter than twenty minutes. Ogg/Opus recordings are split without re-encoding and stored as `.ogg`, preserving channels and original encoding quality. Other formats retain the existing MP3 conversion path without calling OpenAI. The original is preserved. Parts live in the recording storage backend (S3 or local disk), independently of temporary conversion files.
 
 A compact bar shows parts proportionally to their duration. Color and icons indicate status. Hover, click or keyboard interaction reveals details, errors and downloads; the original recording player remains available. “Transcribe” prepares parts when needed for OpenAI diarization models. Other providers retain their existing processing path, now running in the background for manual requests.
 
@@ -47,3 +47,5 @@ Processing time measures the interval between start and completion of each part�
 The language control next to Transcribe explicitly updates the existing default language for future transcriptions. Select French for French meetings to send `language=fr` for every OpenAI part; auto-detection remains available. This is a language hint, not a translation or a perfect-result guarantee. Existing transcripts are unchanged. Subdued speaker colors are reused by local number, and chunked labels identify their part. This does not merge identities across parts or artificially cap speakers; the OpenAI API used here has no parameter to force exactly two speakers.
 
 Reference: [OpenAI language and request parameters](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create).
+
+Part details render in a portal outside the card, with viewport collision handling and dismissal on pointer departure, outside interaction or Escape. Completed parts use a pastel fill. Parts shorter than one second show “< 1 s”, with milliseconds in the details, and are never silently hidden or deleted. Re-transcribe reuses saved audio; use Remove saved parts followed by Split audio to rebuild an older split. Download transcript saves the complete currently selected transcript version as one UTF-8 TXT file, including all parts and labels.
