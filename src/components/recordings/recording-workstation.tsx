@@ -180,6 +180,7 @@ export function RecordingWorkstation({
                             <AudioPartsPanel
                                 key={recording.id}
                                 recordingId={recording.id}
+                                durationMs={recording.duration}
                                 job={audioJob.job}
                                 busy={audioJob.busy || isTranscribing}
                                 error={audioJob.error}

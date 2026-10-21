@@ -17,7 +17,7 @@ export function AudioProcessingSection({
             onToggle={(event) => setOpen(event.currentTarget.open)}
             className="mt-4 border-t pt-3"
         >
-            <summary className="flex min-h-9 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-2 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+            <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 rounded-md border border-border/60 bg-muted/60 px-3 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
                 <span>{summary}</span>
                 <ChevronDown
                     aria-hidden="true"

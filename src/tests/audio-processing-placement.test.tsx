@@ -68,3 +68,25 @@ describe("audio processing placement", () => {
         expect(details.open).toBe(false);
     });
 });
+
+it("does not offer splitting or empty part counters for a short recording", () => {
+    render(
+        <WorkstationDetailPane
+            currentRecording={{ id: "short", duration: 600000 } as Recording}
+            currentTranscription={undefined}
+            isCurrentTranscribing={false}
+            visibleRecordings={[]}
+            onTranscribe={vi.fn()}
+            onSelectRecording={vi.fn()}
+            onBackToList={vi.fn()}
+            hiddenOnMobile={false}
+            initialPlaybackSpeed={1}
+            initialVolume={75}
+            initialAutoPlayNext={false}
+            scrubberStyle="slider"
+        />,
+    );
+    expect(screen.queryByRole("button", { name: "Split audio" })).toBeNull();
+    expect(screen.queryByText(/0\/0/)).toBeNull();
+    expect(screen.getByText(/No splitting needed/)).toBeTruthy();
+});

@@ -255,6 +255,7 @@ export async function processAudioJob(job: AudioJob): Promise<void> {
                 recording.duration,
             );
         } else {
+            await updateAudioJob(job, { status: "transcribing" });
             const result = await transcribeRecording(
                 job.userId,
                 job.recordingId,
@@ -263,7 +264,10 @@ export async function processAudioJob(job: AudioJob): Promise<void> {
                     trigger: "manual",
                     providerId: job.providerId ?? undefined,
                     model: job.model ?? undefined,
-                    diarizationPersistence: persistentDiarization(job, storage),
+                    diarizationPersistence:
+                        recording.duration > 20 * 60 * 1000
+                            ? persistentDiarization(job, storage)
+                            : undefined,
                     assertActive: async () => {
                         if (leaseLost) throw new Error("Audio job interrupted");
                         await updateAudioJob(job, {

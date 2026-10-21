@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import type { DiarizationPersistence } from "@/lib/transcription/openai-diarized-transcribe";
 
 export interface GeminiTranscribeArgs {
     apiKey: string;
@@ -114,5 +115,42 @@ export async function geminiTranscribe({
     return {
         text: text.trim(),
         detectedLanguage: language ?? null,
+    };
+}
+
+export async function geminiTranscribeParts(
+    args: GeminiTranscribeArgs & {
+        durationMs: number;
+        persistence: DiarizationPersistence;
+        fingerprint: string;
+        assertActive?: () => Promise<void>;
+    },
+): Promise<GeminiTranscribeResult> {
+    const texts: string[] = [];
+    for await (const part of args.persistence.segments(
+        args.audioBuffer,
+        args.durationMs,
+        args.fingerprint,
+    )) {
+        await args.assertActive?.();
+        let text = part.cachedText;
+        if (text === undefined) {
+            if (!part.buffer) throw new Error("Prepared audio part is missing");
+            const result = await geminiTranscribe({
+                ...args,
+                audioBuffer: part.buffer,
+                contentType: part.contentType ?? args.contentType,
+            });
+            await args.assertActive?.();
+            text = result.text;
+            await args.persistence.save(part.index, text);
+        }
+        texts.push(`Part ${part.index + 1}\n\n${text}`);
+    }
+    if (!texts.length)
+        throw new Error("No audio parts available for transcription");
+    return {
+        text: texts.join("\n\n"),
+        detectedLanguage: args.language ?? null,
     };
 }

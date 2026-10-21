@@ -47,7 +47,10 @@ import {
     getResponseFormat,
     parseTranscriptionResponse,
 } from "@/lib/transcription/format";
-import { geminiTranscribe } from "@/lib/transcription/gemini-transcribe";
+import {
+    geminiTranscribe,
+    geminiTranscribeParts,
+} from "@/lib/transcription/gemini-transcribe";
 import { isRiffadoIncludedProviderId } from "@/lib/transcription/included-provider";
 import {
     type DiarizationPersistence,
@@ -511,14 +514,31 @@ async function transcribeRecordingInner(
                 );
 
                 if (transcriptionStyle === "gemini") {
-                    const result = await geminiTranscribe({
+                    const args = {
                         apiKey,
                         model,
                         audioBuffer,
                         contentType,
                         language: defaultLanguage,
                         diarize,
-                    });
+                    };
+                    const result =
+                        opts.diarizationPersistence &&
+                        recording.duration > 20 * 60 * 1000
+                            ? await geminiTranscribeParts({
+                                  ...args,
+                                  durationMs: recording.duration,
+                                  persistence: opts.diarizationPersistence,
+                                  fingerprint: JSON.stringify([
+                                      credentials.id,
+                                      model,
+                                      defaultLanguage,
+                                      diarize,
+                                      "gemini-parts-v1",
+                                  ]),
+                                  assertActive: opts.assertActive,
+                              })
+                            : await geminiTranscribe(args);
                     transcriptionText = result.text;
                     detectedLanguage = result.detectedLanguage;
                 } else {

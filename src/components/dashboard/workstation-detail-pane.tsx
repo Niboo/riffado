@@ -115,7 +115,9 @@ export function WorkstationDetailPane({
                             summary={
                                 <>
                                     Audio processing
-                                    {audioJob.job
+                                    {audioJob.job &&
+                                    audioJob.job.parts.length > 0 &&
+                                    currentRecording.duration > 20 * 60 * 1000
                                         ? ` · ${audioJob.job.parts.filter((part) => part.status === "completed").length}/${audioJob.job.parts.length} transcribed${audioJob.job.status === "failed" ? " · Failed" : audioJob.busy ? " · In progress" : ""}`
                                         : ""}
                                 </>
@@ -124,6 +126,7 @@ export function WorkstationDetailPane({
                             <AudioPartsPanel
                                 key={currentRecording.id}
                                 recordingId={currentRecording.id}
+                                durationMs={currentRecording.duration}
                                 job={audioJob.job}
                                 busy={audioJob.busy || isCurrentTranscribing}
                                 error={audioJob.error}

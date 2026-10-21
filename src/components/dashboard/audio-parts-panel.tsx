@@ -49,6 +49,7 @@ const partLabels = {
 
 export function AudioPartsPanel({
     recordingId,
+    durationMs = Number.POSITIVE_INFINITY,
     job: incomingJob,
     busy,
     error,
@@ -57,6 +58,7 @@ export function AudioPartsPanel({
     onRemove,
 }: {
     recordingId: string;
+    durationMs?: number;
     job: AudioJobView | null;
     busy: boolean;
     error: string | null;
@@ -99,6 +101,38 @@ export function AudioPartsPanel({
     const completed =
         job?.parts.filter((p) => p.status === "completed").length ?? 0;
     const current = job?.parts.find((p) => p.status === "transcribing");
+    if (durationMs <= 20 * 60 * 1000) {
+        return (
+            <section
+                aria-label="Audio preparation"
+                className="space-y-3 text-sm"
+            >
+                <p>
+                    {job
+                        ? labels[job.status]
+                        : "The original audio is transcribed directly. No splitting needed."}
+                </p>
+                {(error || job?.error) && (
+                    <p
+                        role="alert"
+                        className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+                    >
+                        {error || job?.error}
+                    </p>
+                )}
+                {job?.status === "failed" && (
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={onRetry}
+                        disabled={busy}
+                    >
+                        Retry transcription
+                    </Button>
+                )}
+            </section>
+        );
+    }
     return (
         <section aria-label="Audio preparation" className="space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -161,15 +195,18 @@ export function AudioPartsPanel({
                     )}
             </div>
             {error && (
-                <p role="alert" className="text-sm text-destructive">
+                <p
+                    role="alert"
+                    className="rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40 p-3 text-sm text-red-800 dark:text-red-200 break-words"
+                >
                     {error}
                 </p>
             )}
             {job?.error && (
-                <div className="space-y-2">
+                <div className="space-y-3 rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40 p-3">
                     <p
                         role="alert"
-                        className="text-sm text-destructive break-words"
+                        className="text-sm text-red-800 dark:text-red-200 break-words"
                     >
                         {job.error}
                     </p>
@@ -326,7 +363,7 @@ export function AudioPartsPanel({
                                                 </p>
                                             )}
                                             {part.error && (
-                                                <p className="text-sm text-destructive break-words">
+                                                <p className="text-sm text-red-800 dark:text-red-200 break-words">
                                                     {part.error}
                                                 </p>
                                             )}
