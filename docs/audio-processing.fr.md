@@ -35,3 +35,15 @@ Les tests d’intégration peuvent utiliser une base PostgreSQL de test isolée 
 Le suivi de chaque morceau inclut son état, l’heure de début et de fin, le nombre de tentatives et une erreur exploitable en cas d’échec. Le morceau actif est identifié dans la barre ; les résultats terminés restent consultables pendant le reste du travail.
 
 Les erreurs non classées conservent désormais un message détaillé limité à 600 caractères, avec masquage des URL et identifiants sensibles. Les anciennes erreurs déjà enregistrées ne peuvent pas être reconstituées : une nouvelle tentative est nécessaire. La coupe Opus inclut une marge de 50 ms pour éviter un morceau final parasite lié à l’alignement des paquets, sans réencodage ni suppression de paquets. Les morceaux déjà enregistrés ne sont pas modifiés.
+
+## Navigation, lecture et mesures
+
+La sélection d’un enregistrement est conservée dans `?recording=<id>`. Les liens acceptent l’ouverture dans un nouvel onglet ; les boutons précédent/suivant du navigateur restaurent la sélection. Un enregistrement ancien est rendu même au-delà du premier lot de la liste. Sa position verticale est mémorisée dans la session du navigateur lors du départ de page et restaurée au rafraîchissement, lorsque le navigateur autorise le stockage de session.
+
+Le suivi des morceaux se trouve dans le lecteur audio, dans une section ouverte par défaut et repliable. Replier cette section ne suspend ni le travail ni son suivi. Les transcriptions partielles s’ouvrent dans une fenêtre de lecture défilante. Les titres des morceaux affichent le numéro et la durée ; les intervalles restent dans les détails. Le transcript principal n’a plus de petite zone de défilement imbriquée.
+
+Le temps affiché est la différence entre le début et la fin de la dernière tentative réussie de chaque morceau ; le total additionne ces durées disponibles. Ce n’est ni la durée de l’audio ni le temps total avec les échecs et l’attente. Une durée manquante n’est pas inventée. Le coût est une estimation d’un passage sur les morceaux, calculée à partir d’un tarif de référence modifiable, initialisé à 0,006 USD/minute. Ce tarif de simulation n’est pas récupéré du compte fournisseur et n’est pas sauvegardé. Le calcul exclut les reprises, appels échoués, résumés et stockage ; il ne représente pas la facture.
+
+Le choix de langue près du bouton Transcribe modifie explicitement la langue par défaut des prochaines transcriptions, en réutilisant le réglage existant. Choisir French pour une réunion française envoie `language=fr` à chaque morceau OpenAI. L’auto-détection reste disponible. La langue n’est pas une traduction ni une garantie de résultat parfait ; les transcriptions déjà stockées ne changent pas. Les couleurs sobres des intervenants sont réutilisées par numéro local, et chaque étiquette découpée indique son morceau : cela ne fusionne pas les identités entre morceaux ni ne limite artificiellement leur nombre. L’API OpenAI utilisée n’expose pas de paramètre pour imposer deux intervenants.
+
+Référence : [langue et paramètres OpenAI](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create).

@@ -52,7 +52,7 @@ describe("audio parts controls", () => {
     it("shows saved intervals, partial results and a resume action after failure", () => {
         render(<AudioPartsPanel {...props} job={job} />);
         expect(screen.getByText("Part 1 · 0:00–19:59")).toBeTruthy();
-        expect(screen.getByText("Saved words")).toBeTruthy();
+        expect(screen.queryByText("Saved words")).toBeNull();
         expect(screen.getByText("OpenAI timed out on this part.")).toBeTruthy();
         fireEvent.click(
             screen.getByRole("button", { name: "Resume transcription" }),
@@ -63,6 +63,37 @@ describe("audio parts controls", () => {
             screen.getByRole("link", { name: "Download part 1" }),
         ).toBeTruthy();
         expect(document.querySelector("audio")).toBeNull();
+    });
+    it("opens a readable transcript dialog and shows processing time and an editable cost estimate", () => {
+        render(
+            <AudioPartsPanel
+                {...props}
+                job={{
+                    ...job,
+                    parts: [
+                        {
+                            ...job.parts[0],
+                            startedAt: "2026-10-21T08:00:00Z",
+                            completedAt: "2026-10-21T08:02:30Z",
+                        },
+                    ],
+                }}
+            />,
+        );
+        fireEvent.click(screen.getByLabelText(/Part 1 .*Transcribed/));
+        expect(screen.getByText("Processing time: 2:30")).toBeTruthy();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Open transcript for part 1" }),
+        );
+        expect(screen.getByRole("dialog").textContent).toContain("Saved words");
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+        expect(screen.queryByRole("dialog")).toBeNull();
+        const settings = screen.getByText("Cost estimate settings");
+        fireEvent.click(settings);
+        fireEvent.change(screen.getByLabelText(/Reference rate/), {
+            target: { value: "0.01" },
+        });
+        expect(screen.getByText(/Estimated total .*0.200 USD/)).toBeTruthy();
     });
     it("opens part details on hover with its error and download action", () => {
         render(<AudioPartsPanel {...props} job={job} />);

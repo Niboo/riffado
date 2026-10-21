@@ -100,7 +100,7 @@ export function RecordingList({
     const [visibleCount, setVisibleCount] = useState(initialChunkSize);
     const searchRef = useRef<HTMLInputElement>(null);
     const sentinelRef = useRef<HTMLDivElement>(null);
-    const rowRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+    const rowRefs = useRef<Map<string, HTMLAnchorElement>>(new Map());
 
     const setSortOrderPersisted = useCallback((next: SortOrder) => {
         setSortOrder(next);
@@ -113,7 +113,7 @@ export function RecordingList({
     }, []);
 
     const registerRowRef = useCallback(
-        (id: string, el: HTMLButtonElement | null) => {
+        (id: string, el: HTMLAnchorElement | null) => {
             if (el) rowRefs.current.set(id, el);
             else rowRefs.current.delete(id);
         },
@@ -153,7 +153,54 @@ export function RecordingList({
         return sorted;
     }, [recordings, transcriptions, query, sortOrder]);
 
-    const visible = filtered.slice(0, visibleCount);
+    const currentId = currentRecording?.id;
+    const selectedIndex = filtered.findIndex(
+        (recording) => recording.id === currentRecording?.id,
+    );
+    const visible = filtered.slice(
+        0,
+        Math.max(visibleCount, selectedIndex + 1),
+    );
+    useEffect(() => {
+        if (!currentId) return;
+        const frame = requestAnimationFrame(() => {
+            const row = rowRefs.current.get(currentId);
+            if (!row) return;
+            row.scrollIntoView({ block: "nearest" });
+            try {
+                const saved = sessionStorage.getItem(
+                    `riffado:recording-scroll:${currentId}`,
+                );
+                if (saved !== null && Number.isFinite(Number(saved)))
+                    window.scrollBy(
+                        0,
+                        row.getBoundingClientRect().top - Number(saved),
+                    );
+            } catch {}
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [currentId]);
+
+    useEffect(() => {
+        const save = () => {
+            if (!currentId) return;
+            const row = rowRefs.current.get(currentId);
+            if (row) {
+                try {
+                    sessionStorage.setItem(
+                        `riffado:recording-scroll:${currentId}`,
+                        String(row.getBoundingClientRect().top),
+                    );
+                } catch {}
+            }
+        };
+        window.addEventListener("pagehide", save);
+        window.addEventListener("beforeunload", save);
+        return () => {
+            window.removeEventListener("pagehide", save);
+            window.removeEventListener("beforeunload", save);
+        };
+    }, [currentId]);
 
     const grouped = useMemo(() => {
         if (sortOrder === "name") {

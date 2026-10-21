@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { RecordingPlayerControls } from "@/components/dashboard/recording-player-controls";
 import { RecordingPlayerHeader } from "@/components/dashboard/recording-player-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +11,7 @@ import type { Recording } from "@/types/recording";
 
 interface RecordingPlayerProps {
     recording: Recording;
+    children?: ReactNode;
     onEnded?: () => void;
     onRenamed?: (filename: string) => void;
     initialPlaybackSpeed?: number;
@@ -33,6 +35,7 @@ interface RecordingPlayerProps {
  */
 export function RecordingPlayer({
     recording,
+    children,
     onEnded,
     onRenamed,
     initialPlaybackSpeed = 1.0,
@@ -113,6 +116,7 @@ export function RecordingPlayer({
                     waveformPeaks={waveformPeaks}
                 />
 
+                {children}
                 <audio
                     ref={audioRef}
                     src={`/api/recordings/${recording.id}/audio`}

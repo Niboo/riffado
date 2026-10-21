@@ -175,8 +175,16 @@ describe("issue #291 — OpenAI diarization audio preparation", () => {
             audioBuffer: part,
             durationMs: 1484000,
             filename: "plaud.mp3",
+            language: "fr",
             timeoutMs: 10000,
         });
+        expect(create.mock.calls.map((call) => call[0].language)).toEqual([
+            "fr",
+            "fr",
+        ]);
+        expect(
+            create.mock.calls.every((call) => call[0].prompt === undefined),
+        ).toBe(true);
         expect(create.mock.calls[0][0].file).toMatchObject({
             name: "plaud-part-1.ogg",
             type: "audio/ogg",

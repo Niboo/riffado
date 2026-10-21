@@ -187,13 +187,13 @@ describe("SpeakerTranscript (#265)", () => {
         expect(turns[0].textContent).toContain("hello");
         expect(turns[3].textContent).toContain("again");
         expect(turns[0].querySelector("span")?.className).toContain(
-            "text-accent-cyan",
+            "text-slate-700",
         );
         expect(turns[3].querySelector("span")?.className).toContain(
-            "text-accent-cyan",
+            "text-slate-700",
         );
         expect(turns[1].querySelector("span")?.className).toContain(
-            "text-emerald-400",
+            "text-teal-800",
         );
     });
 
@@ -212,15 +212,25 @@ describe("SpeakerTranscript (#265)", () => {
         const turns = [...container.querySelectorAll(":scope > div > div")];
         expect(turns).toHaveLength(2);
         expect(turns[0].querySelector("span")?.textContent).toBe(
-            "[00:00] Speaker 1 · Part 1",
+            "[00:00] Speaker 1 (part 1, local label)",
         );
         expect(turns[0].textContent).toContain("First turn");
         expect(turns[1].querySelector("span")?.textContent).toBe(
-            "[12:30] Speaker 2 · Part 1",
+            "[12:30] Speaker 2 (part 1, local label)",
         );
         expect(turns[1].textContent).toContain("Second turn");
     });
 
+    it("reuses subdued label colors across parts without implying a globally identified voice", () => {
+        const { container } = render(
+            createElement(SpeakerTranscript, {
+                text: "[00:00] Speaker 1 · Part 1\nBonjour\n[20:00] Speaker 1 · Part 2\nSuite",
+            }),
+        );
+        const labels = container.querySelectorAll(".font-semibold");
+        expect(labels[0].className).toBe(labels[1].className);
+        expect(labels[1].textContent).toContain("part 2, local label");
+    });
     it("keeps non-diarized transcripts pre-wrapped", () => {
         const text = "Question: what now?\nAction item: ship it\nJust prose.";
         const { container } = render(

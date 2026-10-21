@@ -38,7 +38,7 @@ export function RecordingRow({
     dateTimeFormat: DateTimeFormat;
     onSelect: (recording: Recording) => void;
     onDelete: (recording: Recording) => Promise<void>;
-    registerRef: (id: string, el: HTMLButtonElement | null) => void;
+    registerRef: (id: string, el: HTMLAnchorElement | null) => void;
 }) {
     const confirm = useConfirm();
     return (
@@ -50,14 +50,26 @@ export function RecordingRow({
                     : null,
             )}
         >
-            <button
+            <a
                 ref={(el) => {
                     registerRef(recording.id, el);
                 }}
-                type="button"
-                onClick={() => onSelect(recording)}
+                href={`?recording=${encodeURIComponent(recording.id)}`}
+                aria-current={isSelected ? "page" : undefined}
+                onClick={(event) => {
+                    if (
+                        event.button !== 0 ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                    )
+                        return;
+                    event.preventDefault();
+                    onSelect(recording);
+                }}
                 className={cn(
-                    "w-full text-left transition-colors hover:bg-accent/60",
+                    "block w-full text-left transition-colors hover:bg-accent/60",
                     rowPadding,
                 )}
             >
@@ -103,7 +115,7 @@ export function RecordingRow({
                         </p>
                     )}
                 </div>
-            </button>
+            </a>
             <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>

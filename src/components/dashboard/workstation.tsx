@@ -19,6 +19,7 @@ import { OnboardingDialog } from "@/components/onboarding-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { useAutoSync } from "@/hooks/use-auto-sync";
 import { useListKeyboardNav } from "@/hooks/use-list-keyboard-nav";
+import { useRecordingLocation } from "@/hooks/use-recording-location";
 import { useTheme } from "@/hooks/use-theme";
 import { useTranscribeQueue } from "@/hooks/use-transcribe-queue";
 import { useUploadQueue } from "@/hooks/use-upload-queue";
@@ -112,9 +113,11 @@ export function Workstation({
     isHosted,
 }: WorkstationProps) {
     const { refresh } = useRouter();
-    const [currentRecording, setCurrentRecording] = useState<Recording | null>(
-        recordings.length > 0 ? recordings[0] : null,
-    );
+    const {
+        currentRecording,
+        selectRecording: setCurrentRecording,
+        restored,
+    } = useRecordingLocation(recordings);
     const [settingsOpen, setSettingsOpen] = useState(false);
     // Auto-opens on first paint when the account hasn't finished
     // onboarding yet (server-supplied truth, re-evaluated on every fresh
@@ -133,6 +136,13 @@ export function Workstation({
     // toggle between them instead of stacking. Desktop ignores this
     // state entirely (both panes render via the grid).
     const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+    useEffect(() => {
+        if (
+            restored &&
+            new URL(window.location.href).searchParams.has("recording")
+        )
+            setMobileView("detail");
+    }, [restored]);
     const [providers, setProviders] = useState<Provider[]>(EMPTY_PROVIDERS);
 
     const { theme, setTheme } = useTheme(initialSettings.theme);
@@ -161,11 +171,6 @@ export function Workstation({
     // after refresh()). If the previously-selected recording is no
     // longer present (e.g. just deleted), clear the selection.
     useEffect(() => {
-        setCurrentRecording((prev) => {
-            if (!prev) return prev;
-            const updated = recordings.find((r) => r.id === prev.id);
-            return updated ?? null;
-        });
         // When server data comes back, clear any optimistic hides whose
         // rows no longer exist server-side (deletion confirmed).
         setHiddenIds((prev) => {
@@ -330,7 +335,7 @@ export function Workstation({
                 throw err;
             }
         },
-        [currentRecording, visibleRecordings, refresh],
+        [currentRecording, visibleRecordings, refresh, setCurrentRecording],
     );
 
     const handleRenamed = useCallback(

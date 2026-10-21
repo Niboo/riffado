@@ -16,6 +16,7 @@ export function useAudioJob(recordingId: string, onComplete?: () => void) {
     const job = snapshot?.recordingId === recordingId ? snapshot.job : null;
 
     useEffect(() => {
+        if (!recordingId) return;
         const controller = new AbortController();
         previous.current = null;
         setError(null);

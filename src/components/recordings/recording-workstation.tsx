@@ -4,6 +4,8 @@ import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { AudioPartsPanel } from "@/components/dashboard/audio-parts-panel";
+import { AudioProcessingSection } from "@/components/dashboard/audio-processing-section";
 import { RecordingPlayer } from "@/components/dashboard/recording-player";
 import {
     TranscriptionPanel,
@@ -22,6 +24,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { useAudioJob } from "@/hooks/use-audio-job";
+import { useTranscribeQueue } from "@/hooks/use-transcribe-queue";
 import type { Recording } from "@/types/recording";
 
 interface Transcription {
@@ -58,7 +62,11 @@ export function RecordingWorkstation({
     scrubberStyle,
 }: RecordingWorkstationProps) {
     const { push, refresh } = useRouter();
-    const [isTranscribing, setIsTranscribing] = useState(false);
+    const audioJob = useAudioJob(recording.id, refresh);
+    const { transcribeById, inFlightActions } = useTranscribeQueue({
+        onTranscribeComplete: refresh,
+    });
+    const isTranscribing = inFlightActions.get(recording.id) === "transcribing";
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [filename, setFilename] = useState(recording.filename);
@@ -83,29 +91,10 @@ export function RecordingWorkstation({
         [refresh],
     );
 
-    const handleTranscribe = useCallback(async () => {
-        setIsTranscribing(true);
-        try {
-            const response = await fetch(
-                `/api/recordings/${recording.id}/transcribe`,
-                {
-                    method: "POST",
-                },
-            );
-
-            if (response.ok) {
-                toast.success("Transcription complete");
-                refresh();
-            } else {
-                const error = await response.json();
-                toast.error(error.error || "Transcription failed");
-            }
-        } catch {
-            toast.error("Failed to transcribe recording");
-        } finally {
-            setIsTranscribing(false);
-        }
-    }, [recording.id, refresh]);
+    const handleTranscribe = useCallback(
+        () => transcribeById(recording.id),
+        [transcribeById, recording.id],
+    );
 
     const handleDelete = useCallback(async () => {
         setIsDeleting(true);
@@ -176,8 +165,36 @@ export function RecordingWorkstation({
                         initialAutoPlayNext={initialAutoPlayNext}
                         scrubberStyle={scrubberStyle}
                         onRenamed={handleRenamed}
-                    />
+                    >
+                        <AudioProcessingSection
+                            key={recording.id}
+                            summary={
+                                <>
+                                    Audio processing
+                                    {audioJob.job
+                                        ? ` · ${audioJob.job.status}`
+                                        : ""}
+                                </>
+                            }
+                        >
+                            <AudioPartsPanel
+                                key={recording.id}
+                                recordingId={recording.id}
+                                job={audioJob.job}
+                                busy={audioJob.busy || isTranscribing}
+                                error={audioJob.error}
+                                onSplit={audioJob.split}
+                                onRetry={handleTranscribe}
+                                onRemove={audioJob.remove}
+                            />
+                        </AudioProcessingSection>
+                    </RecordingPlayer>
                     <TranscriptionPanel
+                        processingBusy={audioJob.busy}
+                        processingTranscribing={
+                            audioJob.busy &&
+                            audioJob.job?.action === "transcribe"
+                        }
                         recording={displayRecording}
                         transcription={transcription}
                         transcripts={transcripts}

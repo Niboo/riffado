@@ -35,3 +35,15 @@ Integration tests can use an isolated PostgreSQL test database: `AUDIO_JOB_TEST_
 Each part reports its status, start and completion time, attempt count and a useful failure message. The active part is highlighted in the bar; completed results remain accessible while the remaining work runs.
 
 Unclassified failures retain a detailed message capped at 600 characters, with URLs and sensitive credentials redacted. Previously stored generic errors cannot be reconstructed; retry to capture a new diagnostic. Opus splitting includes a 50 ms boundary margin to avoid a tiny final part caused by packet alignment, without re-encoding or discarding packets. Previously saved parts remain unchanged.
+
+## Navigation, reading and metrics
+
+The selected recording is stored in `?recording=<id>`. Recording links support new tabs; browser back/forward restores selection. Older selected recordings render beyond the initial list batch. Their vertical viewport position is saved on page departure and restored on refresh when session storage is available.
+
+Processing now lives inside the audio player in an initially expanded, collapsible section. Collapsing does not pause the worker or polling. Partial transcripts open in a scrollable reading dialog. Segment titles show number and duration; full intervals stay in the details. The main transcript no longer has a small nested scrolling area.
+
+Processing time measures the interval between start and completion of each part’s latest successful attempt. The total sums available intervals, excluding failed attempts and queue time. Missing timings are not invented. Cost is a one-pass estimate based on an editable reference rate initially set to USD 0.006 per audio minute. This simulation rate is neither fetched from the provider account nor persisted. The calculation excludes retries, failed requests, summaries and storage and is not an invoice.
+
+The language control next to Transcribe explicitly updates the existing default language for future transcriptions. Select French for French meetings to send `language=fr` for every OpenAI part; auto-detection remains available. This is a language hint, not a translation or a perfect-result guarantee. Existing transcripts are unchanged. Subdued speaker colors are reused by local number, and chunked labels identify their part. This does not merge identities across parts or artificially cap speakers; the OpenAI API used here has no parameter to force exactly two speakers.
+
+Reference: [OpenAI language and request parameters](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create).

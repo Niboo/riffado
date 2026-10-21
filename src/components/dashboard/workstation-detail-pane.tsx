@@ -1,10 +1,13 @@
 "use client";
 
 import { ArrowLeft } from "lucide-react";
+import { AudioPartsPanel } from "@/components/dashboard/audio-parts-panel";
+import { AudioProcessingSection } from "@/components/dashboard/audio-processing-section";
 import { RecordingPlayer } from "@/components/dashboard/recording-player";
 import { TranscriptionPanel } from "@/components/dashboard/transcription-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAudioJob } from "@/hooks/use-audio-job";
 import { cn } from "@/lib/utils";
 import type { Recording } from "@/types/recording";
 
@@ -58,6 +61,10 @@ export function WorkstationDetailPane({
     initialAutoPlayNext,
     scrubberStyle,
 }: Props) {
+    const audioJob = useAudioJob(
+        currentRecording?.id ?? "",
+        onTranscribeComplete,
+    );
     return (
         <div
             className={cn(
@@ -102,8 +109,36 @@ export function WorkstationDetailPane({
                                 );
                             }
                         }}
-                    />
+                    >
+                        <AudioProcessingSection
+                            key={currentRecording.id}
+                            summary={
+                                <>
+                                    Audio processing
+                                    {audioJob.job
+                                        ? ` · ${audioJob.job.parts.filter((part) => part.status === "completed").length}/${audioJob.job.parts.length} transcribed${audioJob.job.status === "failed" ? " · Failed" : audioJob.busy ? " · In progress" : ""}`
+                                        : ""}
+                                </>
+                            }
+                        >
+                            <AudioPartsPanel
+                                key={currentRecording.id}
+                                recordingId={currentRecording.id}
+                                job={audioJob.job}
+                                busy={audioJob.busy || isCurrentTranscribing}
+                                error={audioJob.error}
+                                onSplit={audioJob.split}
+                                onRetry={onTranscribe}
+                                onRemove={audioJob.remove}
+                            />
+                        </AudioProcessingSection>
+                    </RecordingPlayer>
                     <TranscriptionPanel
+                        processingBusy={audioJob.busy}
+                        processingTranscribing={
+                            audioJob.busy &&
+                            audioJob.job?.action === "transcribe"
+                        }
                         recording={currentRecording}
                         transcription={currentTranscription}
                         isTranscribing={isCurrentTranscribing}

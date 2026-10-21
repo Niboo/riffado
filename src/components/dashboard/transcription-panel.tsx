@@ -12,7 +12,7 @@ import {
     Trash2,
 } from "lucide-react";
 import { useState } from "react";
-import { AudioPartsPanel } from "@/components/dashboard/audio-parts-panel";
+import { MeetingLanguageControl } from "@/components/dashboard/meeting-language-control";
 import { TranscribeInBrowserButton } from "@/components/dashboard/transcribe-in-browser-button";
 import {
     RichMarkdown,
@@ -27,7 +27,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { useAudioJob } from "@/hooks/use-audio-job";
 import { useTranscriptionSummary } from "@/hooks/use-transcription-summary";
 import type { Recording } from "@/types/recording";
 
@@ -47,6 +46,8 @@ export interface TranscriptOption {
 
 interface TranscriptionPanelProps {
     recording: Recording;
+    processingBusy?: boolean;
+    processingTranscribing?: boolean;
     /** Back-compat single transcript. Used only when `transcripts` is absent. */
     transcription?: Transcription;
     /** All transcripts for the recording, one per source, primary first. When
@@ -66,17 +67,17 @@ function transcriptSourceLabel(source: string): string {
 
 export function TranscriptionPanel({
     recording,
+    processingBusy = false,
+    processingTranscribing = false,
     transcription,
     transcripts,
     isTranscribing: requestedTranscribing,
     onTranscribe,
     onTranscribeComplete,
 }: TranscriptionPanelProps) {
-    const audioJob = useAudioJob(recording.id, onTranscribeComplete);
-    const isTranscribing =
-        requestedTranscribing ||
-        (audioJob.busy && audioJob.job?.action === "transcribe");
-    const actionDisabled = isTranscribing || audioJob.busy;
+    const [languagePending, setLanguagePending] = useState(false);
+    const isTranscribing = requestedTranscribing || processingTranscribing;
+    const actionDisabled = isTranscribing || processingBusy || languagePending;
     const transcriptList: TranscriptOption[] =
         transcripts && transcripts.length > 0
             ? transcripts
@@ -117,12 +118,16 @@ export function TranscriptionPanel({
             {/* Transcription Card */}
             <Card>
                 <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                         <CardTitle className="flex items-center gap-2">
                             <FileText className="size-5" />
                             Transcription
                         </CardTitle>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <MeetingLanguageControl
+                                disabled={isTranscribing || processingBusy}
+                                onPendingChange={setLanguagePending}
+                            />
                             {activeTranscript?.text && (
                                 <Button
                                     onClick={onTranscribe}
@@ -165,16 +170,6 @@ export function TranscriptionPanel({
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <AudioPartsPanel
-                        key={recording.id}
-                        recordingId={recording.id}
-                        job={audioJob.job}
-                        busy={audioJob.busy || requestedTranscribing}
-                        error={audioJob.error}
-                        onSplit={audioJob.split}
-                        onRetry={onTranscribe}
-                        onRemove={audioJob.remove}
-                    />
                     {isTranscribing ? (
                         <div className="flex flex-col items-center justify-center py-12">
                             <div className="animate-spin size-8 border-2 border-primary border-t-transparent rounded-full mb-4" />
@@ -206,7 +201,7 @@ export function TranscriptionPanel({
                                     ))}
                                 </div>
                             )}
-                            <div className="bg-muted rounded-lg p-4 max-h-96 overflow-y-auto text-sm">
+                            <div className="py-2 text-sm">
                                 <SpeakerTranscript
                                     text={activeTranscript.text}
                                 />
@@ -255,7 +250,7 @@ export function TranscriptionPanel({
             {activeTranscript?.text && (
                 <Card>
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
                             <CardTitle className="flex items-center gap-2">
                                 <ListChecks className="size-5" />
                                 Summary

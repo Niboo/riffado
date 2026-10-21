@@ -351,12 +351,12 @@ const TIMESTAMPED_SPEAKER_RE =
     /^\[(\d{2}(?::\d{2}){1,2})\]\s+(Speaker\s+\w+)(\s+·\s+Part\s+\d+)?$/;
 
 const SPEAKER_COLORS = [
-    "text-accent-cyan",
-    "text-emerald-400",
-    "text-amber-400",
-    "text-violet-400",
-    "text-rose-400",
-    "text-sky-400",
+    "text-slate-700 dark:text-slate-300",
+    "text-teal-800 dark:text-teal-300",
+    "text-stone-700 dark:text-stone-300",
+    "text-blue-800 dark:text-blue-300",
+    "text-emerald-800 dark:text-emerald-300",
+    "text-zinc-700 dark:text-zinc-300",
 ];
 
 /**
@@ -398,8 +398,8 @@ export function SpeakerTranscript({
         } else if (timestamped) {
             const part = timestamped[3] ?? "";
             turns.push({
-                speaker: `${timestamped[2]}${part}`,
-                label: `[${timestamped[1]}] ${timestamped[2]}${part}`,
+                speaker: timestamped[2],
+                label: `[${timestamped[1]}] ${timestamped[2]}${part ? ` (part ${part.match(/\d+/)?.[0]}, local label)` : ""}`,
                 text: "",
             });
         } else if (turns.length) {
