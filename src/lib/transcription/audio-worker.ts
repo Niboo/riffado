@@ -27,7 +27,11 @@ import type {
 import { transcribeRecording } from "@/lib/transcription/transcribe-recording";
 import { isBuild } from "@/lib/utils";
 
-import { audioPartFormat } from "@/types/audio-processing";
+import {
+    audioPartFormat,
+    isUsableAudioPart,
+    MIN_AUDIO_PART_SECONDS,
+} from "@/types/audio-processing";
 
 export const AUDIO_PART_SECONDS = 1199;
 
@@ -37,6 +41,7 @@ export async function prepareAudioParts(
     audio: Buffer,
     durationMs: number,
 ): Promise<void> {
+    await removeShortAudioParts(job, storage);
     const opus = isOggOpus(audio);
     if (
         opus &&
@@ -59,15 +64,21 @@ export async function prepareAudioParts(
     const segments = opus
         ? splitOpusSegments(audio, partSeconds)
         : transcodeToMp3Segments(audio, partSeconds);
+    let sourceOffset = 0;
     for await (const segment of segments) {
-        if (job.parts.some((p) => p.index === segment.index)) continue;
         const metadata = await parseBuffer(segment.buffer, contentType, {
             duration: true,
         });
         const duration = metadata.format.duration;
         if (!duration || !Number.isFinite(duration) || duration > 1200)
             throw new Error("Generated audio part has an invalid duration");
-        const startSeconds = job.parts.at(-1)?.endSeconds ?? 0;
+        const startSeconds = segment.startSeconds ?? sourceOffset;
+        sourceOffset = startSeconds + duration;
+        if (
+            duration < MIN_AUDIO_PART_SECONDS ||
+            job.parts.some((part) => part.index === segment.index)
+        )
+            continue;
         const storageKey = `audio-parts/${job.userId}/${job.recordingId}/${job.id}/part-${segment.index}.${extension}`;
         await updateAudioJob(job, {
             leaseUntil: new Date(Date.now() + AUDIO_LEASE_MS),
@@ -87,7 +98,31 @@ export async function prepareAudioParts(
             `[audio-job] ${job.id} saved part ${segment.index + 1}/${segment.count}`,
         );
     }
+    if (!job.parts.length)
+        throw new Error(
+            "No audio part meets the minimum duration of 5 seconds",
+        );
     await updateAudioJob(job, { splitComplete: true });
+}
+
+async function removeShortAudioParts(
+    job: AudioJob,
+    storage: StorageProvider,
+): Promise<void> {
+    const shortParts = job.parts.filter((part) => !isUsableAudioPart(part));
+    for (const part of shortParts) {
+        await updateAudioJob(job, {
+            leaseUntil: new Date(Date.now() + AUDIO_LEASE_MS),
+        });
+        if (await storage.exists(part.storageKey))
+            await storage.deleteFile(part.storageKey);
+    }
+    if (shortParts.length)
+        await updateAudioJob(job, {
+            parts: job.parts.filter(isUsableAudioPart),
+            splitComplete:
+                job.splitComplete && job.parts.some(isUsableAudioPart),
+        });
 }
 
 export function persistentDiarization(
@@ -211,6 +246,7 @@ export async function processAudioJob(job: AudioJob): Promise<void> {
         )
             throw new Error("Source audio changed");
         const storage = await createUserStorageProvider(job.userId);
+        await removeShortAudioParts(job, storage);
         if (job.action === "split") {
             await prepareAudioParts(
                 job,

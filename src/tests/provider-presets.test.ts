@@ -115,3 +115,13 @@ describe("provider-presets", () => {
         });
     });
 });
+
+it("suggests only Gemini 3.8 Flash and includes the current OpenAI transcription model", () => {
+    expect(findPreset("Google Gemini")?.defaultModel).toBe("gemini-3.8-flash");
+    expect(findPreset("Google Gemini")?.knownTranscriptionModels).toEqual([
+        "gemini-3.8-flash",
+    ]);
+    expect(findPreset("OpenAI")?.knownTranscriptionModels).toContain(
+        "gpt-transcribe",
+    );
+});

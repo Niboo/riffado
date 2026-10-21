@@ -96,7 +96,7 @@ export async function generateTitleFromTranscription(
         let model = credentials.defaultModel || "gpt-4o-mini";
 
         // If the model is a Whisper model (for transcription), use a chat model instead
-        if (model.includes("whisper") || model.includes("whisper-")) {
+        if (/whisper|transcribe|diariz/i.test(model)) {
             model = "gpt-4o-mini";
         }
 
@@ -111,7 +111,9 @@ export async function generateTitleFromTranscription(
         // message rather than the user prompt, so it doesn't compete with
         // the title-format rules in the user prompt.
         const languageDirective = getAiOutputLanguageDirective(
-            userSettingsRow?.aiOutputLanguage ?? null,
+            userSettingsRow?.aiOutputLanguage ||
+                userSettingsRow?.defaultTranscriptionLanguage ||
+                null,
         );
 
         // Replacement function so `$` sequences in the transcript are

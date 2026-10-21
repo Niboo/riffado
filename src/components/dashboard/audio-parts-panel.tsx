@@ -3,6 +3,7 @@
 import {
     AlertCircle,
     CheckCircle2,
+    ChevronDown,
     Download,
     Loader2,
     Scissors,
@@ -19,11 +20,12 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { InfoHint } from "@/components/ui/info-hint";
 import {
     audioProcessingSeconds,
     estimatedAudioCost,
 } from "@/lib/transcription/audio-metrics";
-import type { AudioJobView } from "@/types/audio-processing";
+import { type AudioJobView, isUsableAudioPart } from "@/types/audio-processing";
 
 function time(seconds: number): string {
     const whole = Math.max(0, Math.floor(seconds));
@@ -47,7 +49,7 @@ const partLabels = {
 
 export function AudioPartsPanel({
     recordingId,
-    job,
+    job: incomingJob,
     busy,
     error,
     onSplit,
@@ -62,6 +64,9 @@ export function AudioPartsPanel({
     onRetry: () => void;
     onRemove: () => void;
 }) {
+    const job = incomingJob
+        ? { ...incomingJob, parts: incomingJob.parts.filter(isUsableAudioPart) }
+        : null;
     const rateId = useId();
     const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
         undefined,
@@ -98,7 +103,15 @@ export function AudioPartsPanel({
         <section aria-label="Audio preparation" className="space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">
-                    <h3 className="text-sm font-medium">Audio parts</h3>
+                    <div className="flex items-center gap-1">
+                        <h3 className="text-sm font-medium">Audio parts</h3>
+                        <InfoHint label="About audio splitting">
+                            Minimum part length: 5 seconds. Shorter fragments
+                            are discarded. Previously saved short fragments are
+                            deleted on the next processing run. The original
+                            audio and full transcript are kept.
+                        </InfoHint>
+                    </div>
                     <p className="text-sm text-muted-foreground">
                         Up to 20 minutes per part. Hover or select for details.
                     </p>
@@ -225,7 +238,7 @@ export function AudioPartsPanel({
                                                 setOpenPart(partKey);
                                             }}
                                             aria-label={`Part ${part.index + 1} · ${time(part.startSeconds)}–${time(part.endSeconds)} · ${partLabels[part.status]}`}
-                                            className={`flex w-full h-14 cursor-pointer list-none items-center justify-center gap-2 rounded px-2 text-xs font-medium tabular-nums focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden ${part.status === "failed" ? "bg-destructive text-white" : part.status === "completed" ? "bg-teal-100 text-teal-950 dark:bg-teal-950 dark:text-teal-200 border border-teal-200 dark:border-teal-800" : part.status === "transcribing" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground border"}`}
+                                            className={`flex w-full h-14 cursor-pointer list-none items-center justify-center gap-2 rounded px-2 text-xs font-medium tabular-nums focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden ${part.status === "failed" ? "bg-destructive text-white" : part.status === "completed" ? "bg-[#e3eddf] text-[#354b32] dark:bg-[#344630] dark:text-[#dfecd9] border border-[#c8d8c2] dark:border-[#52694a]" : part.status === "transcribing" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground border"}`}
                                         >
                                             {Icon && (
                                                 <Icon
@@ -238,14 +251,10 @@ export function AudioPartsPanel({
                                                     Part {part.index + 1}
                                                 </span>
                                                 <span className="truncate text-[11px] font-normal">
-                                                    {part.endSeconds -
-                                                        part.startSeconds <
-                                                    1
-                                                        ? "< 1 s"
-                                                        : time(
-                                                              part.endSeconds -
-                                                                  part.startSeconds,
-                                                          )}
+                                                    {time(
+                                                        part.endSeconds -
+                                                            part.startSeconds,
+                                                    )}
                                                 </span>
                                             </span>
                                         </button>
@@ -316,20 +325,6 @@ export function AudioPartsPanel({
                                                     ).toFixed(4)}
                                                 </p>
                                             )}
-                                            {part.endSeconds -
-                                                part.startSeconds <
-                                                1 && (
-                                                <p className="text-xs text-muted-foreground">
-                                                    Very short audio fragment (
-                                                    {(
-                                                        (part.endSeconds -
-                                                            part.startSeconds) *
-                                                        1000
-                                                    ).toFixed(0)}{" "}
-                                                    ms), preserved with the
-                                                    saved split.
-                                                </p>
-                                            )}
                                             {part.error && (
                                                 <p className="text-sm text-destructive break-words">
                                                     {part.error}
@@ -365,32 +360,31 @@ export function AudioPartsPanel({
                     })}
                 </ol>
             )}
-            {job &&
-                job.parts.length > 1 &&
-                job.parts.at(-1) &&
-                (job.parts.at(-1)?.endSeconds ?? 0) -
-                    (job.parts.at(-1)?.startSeconds ?? 0) <
-                    1 && (
-                    <p className="text-xs text-muted-foreground">
-                        The saved split contains a very short final fragment.
-                        Re-transcribing reuses it. To rebuild the split, remove
-                        saved parts, then split the original again. The original
-                        and full transcript are kept.
-                    </p>
-                )}
             {job && job.parts.length > 0 && (
                 <div className="space-y-2 text-xs text-muted-foreground">
-                    <p>
-                        {totalSeconds > 0
-                            ? `Saved processing time: ${time(totalSeconds)} · `
-                            : ""}
-                        {numericRate !== null
-                            ? `Estimated total (one pass): $${estimatedAudioCost(audioSeconds, numericRate).toFixed(3)} USD`
-                            : "Enter a rate to estimate cost"}
-                    </p>
-                    <details>
-                        <summary className="cursor-pointer">
+                    <div className="flex flex-wrap items-center gap-1">
+                        <p>
+                            {totalSeconds > 0
+                                ? `Saved processing time: ${time(totalSeconds)} · `
+                                : ""}
+                            {numericRate !== null
+                                ? `Estimated total (one pass): $${estimatedAudioCost(audioSeconds, numericRate).toFixed(3)} USD`
+                                : "Enter a rate to estimate cost"}
+                        </p>
+                        <InfoHint label="About cost estimates">
+                            Indicative calculation using the editable reference
+                            rate, not your provider bill. Excludes retries,
+                            failed requests, storage and summaries. Applies to
+                            one pass over all saved parts.
+                        </InfoHint>
+                    </div>
+                    <details className="group/cost">
+                        <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-md px-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
                             Cost estimate settings
+                            <ChevronDown
+                                aria-hidden="true"
+                                className="size-4 transition-transform group-open/cost:rotate-180 motion-reduce:transition-none"
+                            />
                         </summary>
                         <div className="mt-2 space-y-2">
                             <label
@@ -410,12 +404,6 @@ export function AudioPartsPanel({
                                     className="w-24 rounded border bg-background px-2 py-1 text-foreground"
                                 />
                             </label>
-                            <p>
-                                Indicative calculation using the editable
-                                reference rate, not your provider bill. Excludes
-                                retries, failed requests, storage and summaries.
-                                Applies to one pass over all saved parts.
-                            </p>
                         </div>
                     </details>
                 </div>

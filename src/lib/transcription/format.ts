@@ -8,7 +8,12 @@ export type ResponseFormat = "diarized_json" | "json" | "verbose_json";
 
 export function getResponseFormat(model: string): ResponseFormat {
     if (model.includes("diarize")) return "diarized_json";
-    if (model.startsWith("gpt-4o")) return "json";
+    if (
+        model.startsWith("gpt-4o") ||
+        model === "gpt-transcribe" ||
+        model.startsWith("gpt-transcribe-")
+    )
+        return "json";
     return "verbose_json";
 }
 
@@ -32,10 +37,19 @@ export function parseTranscriptionResponse(
         };
     }
 
-    const plain = transcription as { text?: string };
+    const plain = transcription as {
+        text?: string;
+        languages?: Array<{ code?: string }>;
+    };
     const text =
         typeof transcription === "string" ? transcription : (plain.text ?? "");
-    return { text, detectedLanguage: null };
+    return {
+        text,
+        detectedLanguage:
+            typeof plain.languages?.[0]?.code === "string"
+                ? plain.languages[0].code
+                : null,
+    };
 }
 
 export function buildTranscriptionParams(args: {
@@ -52,6 +66,10 @@ export function buildTranscriptionParams(args: {
         ...(responseFormat === "diarized_json"
             ? { chunking_strategy: "auto" as const }
             : {}),
-        ...(language ? { language } : {}),
+        ...(language
+            ? model === "gpt-transcribe" || model.startsWith("gpt-transcribe-")
+                ? { languages: [language] }
+                : { language }
+            : {}),
     };
 }

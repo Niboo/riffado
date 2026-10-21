@@ -3,6 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseBuffer } from "music-metadata";
+import { MIN_AUDIO_PART_SECONDS } from "@/types/audio-processing";
 
 export function runFfmpeg(
     input: Buffer,
@@ -95,7 +96,7 @@ export function transcodeToMp3(input: Buffer): Promise<Buffer> {
 export async function* transcodeToMp3Segments(
     input: Buffer,
     segmentSeconds: number,
-): AsyncGenerator<{ buffer: Buffer; index: number; count: number }> {
+): AsyncGenerator<OpusAudioSegment> {
     const workDir = await mkdtemp(join(tmpdir(), "riffado-diarize-"));
     try {
         const outputPattern = join(workDir, "part-%06d.mp3");
@@ -116,11 +117,14 @@ export async function* transcodeToMp3Segments(
         if (filenames.length === 0) {
             throw new Error("ffmpeg produced no MP3 segments");
         }
-        for (const [index, name] of filenames.entries()) {
+        const parts = await eligibleSegments(workDir, filenames, "audio/mpeg");
+        for (const [index, part] of parts.entries()) {
             yield {
-                buffer: await readFile(join(workDir, name)),
+                buffer: await readFile(join(workDir, part.name)),
                 index,
-                count: filenames.length,
+                count: parts.length,
+                startSeconds: part.startSeconds,
+                durationSeconds: part.durationSeconds,
             };
         }
     } finally {
@@ -203,29 +207,55 @@ export async function* splitOpusSegments(
             .filter((name) => name.endsWith(".ogg"))
             .sort();
         if (!names.length) throw new Error("ffmpeg produced no Opus segments");
-        let startSeconds = 0;
-        for (const [index, name] of names.entries()) {
-            const buffer = await readFile(join(workDir, name));
-            const metadata = await parseBuffer(buffer, "audio/ogg", {
-                duration: true,
-            });
-            const durationSeconds = metadata.format.duration;
-            if (
-                !isOggOpus(buffer) ||
-                !durationSeconds ||
-                !Number.isFinite(durationSeconds)
-            )
+        const parts = await eligibleSegments(workDir, names, "audio/ogg");
+        for (const [index, part] of parts.entries()) {
+            const buffer = await readFile(join(workDir, part.name));
+            if (!isOggOpus(buffer))
                 throw new Error("Generated Opus part is invalid");
             yield {
                 buffer,
                 index,
-                count: names.length,
-                startSeconds,
-                durationSeconds,
+                count: parts.length,
+                startSeconds: part.startSeconds,
+                durationSeconds: part.durationSeconds,
             };
-            startSeconds += durationSeconds;
         }
     } finally {
         await rm(workDir, { recursive: true, force: true });
     }
+}
+
+async function eligibleSegments(
+    directory: string,
+    names: string[],
+    contentType: string,
+) {
+    const parts: Array<{
+        name: string;
+        startSeconds: number;
+        durationSeconds: number;
+    }> = [];
+    let startSeconds = 0;
+    for (const name of names) {
+        const metadata = await parseBuffer(
+            await readFile(join(directory, name)),
+            contentType,
+            { duration: true },
+        );
+        const durationSeconds = metadata.format.duration;
+        if (
+            durationSeconds === undefined ||
+            !Number.isFinite(durationSeconds) ||
+            durationSeconds < 0
+        )
+            throw new Error("Generated audio part has an invalid duration");
+        if (durationSeconds >= MIN_AUDIO_PART_SECONDS)
+            parts.push({ name, startSeconds, durationSeconds });
+        startSeconds += durationSeconds;
+    }
+    if (!parts.length)
+        throw new Error(
+            "No audio part meets the minimum duration of 5 seconds",
+        );
+    return parts;
 }

@@ -517,6 +517,7 @@ async function transcribeRecordingInner(
                         audioBuffer,
                         contentType,
                         language: defaultLanguage,
+                        diarize,
                     });
                     transcriptionText = result.text;
                     detectedLanguage = result.detectedLanguage;

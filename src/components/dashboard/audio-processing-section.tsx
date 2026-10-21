@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 export function AudioProcessingSection({
@@ -16,8 +17,12 @@ export function AudioProcessingSection({
             onToggle={(event) => setOpen(event.currentTarget.open)}
             className="mt-4 border-t pt-3"
         >
-            <summary className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
-                {summary}
+            <summary className="flex min-h-9 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-2 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                <span>{summary}</span>
+                <ChevronDown
+                    aria-hidden="true"
+                    className={`size-4 text-muted-foreground transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+                />
             </summary>
             <div className="pt-3">{children}</div>
         </details>

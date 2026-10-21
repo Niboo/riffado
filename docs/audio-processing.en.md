@@ -34,7 +34,7 @@ Integration tests can use an isolated PostgreSQL test database: `AUDIO_JOB_TEST_
 
 Each part reports its status, start and completion time, attempt count and a useful failure message. The active part is highlighted in the bar; completed results remain accessible while the remaining work runs.
 
-Unclassified failures retain a detailed message capped at 600 characters, with URLs and sensitive credentials redacted. Previously stored generic errors cannot be reconstructed; retry to capture a new diagnostic. Opus splitting includes a 50 ms boundary margin to avoid a tiny final part caused by packet alignment, without re-encoding or discarding packets. Previously saved parts remain unchanged.
+Unclassified failures retain a detailed message capped at 600 characters, with URLs and sensitive credentials redacted. Previously stored generic errors cannot be reconstructed; retry to capture a new diagnostic. Opus splitting includes a 50 ms boundary margin to avoid a tiny final part caused by packet alignment, without re-encoding retained parts. Saved parts shorter than five seconds are deleted on the next processing run; other parts remain reusable.
 
 ## Navigation, reading and metrics
 
@@ -48,4 +48,8 @@ The language control next to Transcribe explicitly updates the existing default 
 
 Reference: [OpenAI language and request parameters](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create).
 
-Part details render in a portal outside the card, with viewport collision handling and dismissal on pointer departure, outside interaction or Escape. Completed parts use a pastel fill. Parts shorter than one second show “< 1 s”, with milliseconds in the details, and are never silently hidden or deleted. Re-transcribe reuses saved audio; use Remove saved parts followed by Split audio to rebuild an older split. Download transcript saves the complete currently selected transcript version as one UTF-8 TXT file, including all parts and labels.
+Part details render in a portal outside the card, with viewport collision handling and dismissal on pointer departure, outside interaction or Escape. Completed parts use a pastel sage-green fill. The minimum part length is five seconds. Shorter fragments are excluded from splitting, per-part transcripts and counts. Previously saved short fragments disappear from the view and are physically deleted on the next processing run. The original remains intact. Sources that produce no eligible parts fail explicitly before contacting the provider. Re-transcribe reuses saved audio; use Remove saved parts followed by Split audio to rebuild an older split. Download transcript saves the complete currently selected transcript version as one UTF-8 TXT file, including all parts and labels.
+
+Splitting and cost explanations are available through information bubbles on hover, focus or click. Sections use chevrons. Title generation replaces an audio model with gpt-4o-mini and uses the transcription language when no output language is configured.
+
+Google Gemini suggests only `gemini-3.8-flash`. Custom model IDs remain available for models compatible with the provider API; changing an ID cannot change its API protocol. Existing provider settings are not migrated or overwritten. Gemini follows the speaker diarization setting and requests original-language speaker paragraphs without timestamps. Its 20 MiB inline limit and whole-recording processing remain unchanged. OpenAI also suggests `gpt-transcribe`, using JSON responses and its `languages` input. This model is not a replacement for speaker diarization. Dedicated Gemini Transcribe and OpenAI chat-audio models require separate adapters; they are not advertised as supported by this change.

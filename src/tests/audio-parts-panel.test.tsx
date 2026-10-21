@@ -150,7 +150,7 @@ describe("audio parts controls", () => {
             expect(second.getAttribute("aria-expanded")).toBe("false"),
         );
     });
-    it("keeps a minimum width and removes the icon for a tiny untranscribed part", () => {
+    it("omits saved fragments below five seconds from the blocks and progress count", () => {
         render(
             <AudioPartsPanel
                 {...props}
@@ -161,7 +161,7 @@ describe("audio parts controls", () => {
                         {
                             index: 2,
                             startSeconds: 2398,
-                            endSeconds: 2398.01,
+                            endSeconds: 2402.999,
                             bytes: 20,
                             status: "ready",
                         },
@@ -169,15 +169,10 @@ describe("audio parts controls", () => {
                 }}
             />,
         );
-        const trigger = screen.getByLabelText(/Part 3 .*Ready to transcribe/);
+        expect(screen.queryByLabelText(/Part 3/)).toBeNull();
+        expect(screen.getByText(/1 of 2 complete/)).toBeTruthy();
+        const trigger = screen.getByLabelText(/Part 1 .*Transcribed/);
         expect(trigger.closest("li")?.className).toContain("min-w-24");
-        expect(trigger.querySelector("svg")).toBeNull();
-        expect(trigger.textContent).toContain("< 1 s");
-        expect(
-            screen.getByText(
-                /saved split contains a very short final fragment/,
-            ),
-        ).toBeTruthy();
     });
     it("keeps destructive cleanup behind an explicit confirmation", () => {
         render(<AudioPartsPanel {...props} job={job} />);
@@ -223,4 +218,22 @@ describe("audio parts controls", () => {
             screen.queryByRole("button", { name: "Remove saved parts" }),
         ).toBeNull();
     });
+});
+
+it("keeps explanations in dismissible information bubbles", async () => {
+    render(<AudioPartsPanel {...props} job={job} />);
+    expect(screen.queryByText(/Indicative calculation/)).toBeNull();
+    fireEvent.click(
+        screen.getByRole("button", { name: "About cost estimates" }),
+    );
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toContain("Excludes retries");
+    fireEvent.keyDown(tooltip, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+    fireEvent.click(
+        screen.getByRole("button", { name: "About audio splitting" }),
+    );
+    expect((await screen.findByRole("tooltip")).textContent).toContain(
+        "5 seconds",
+    );
 });

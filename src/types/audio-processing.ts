@@ -1,3 +1,5 @@
+export const MIN_AUDIO_PART_SECONDS = 5;
+
 export type AudioJobStatus =
     | "queued"
     | "splitting"
@@ -30,6 +32,12 @@ export interface AudioJobView {
     parts: Array<
         Omit<AudioPart, "encryptedText" | "storageKey"> & { text?: string }
     >;
+}
+
+export function isUsableAudioPart(
+    part: Pick<AudioPart, "startSeconds" | "endSeconds">,
+): boolean {
+    return part.endSeconds - part.startSeconds >= MIN_AUDIO_PART_SECONDS;
 }
 
 export function isAudioJobActive(status: AudioJobStatus): boolean {

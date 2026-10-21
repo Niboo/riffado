@@ -36,7 +36,7 @@ describe.runIf(process.env.RIFFADO_TEST_FFMPEG === "1")(
                 "-i",
                 "sine=frequency=440:sample_rate=48000",
                 "-t",
-                "12",
+                "30",
                 "-ac",
                 "2",
                 "-c:a",
@@ -48,7 +48,7 @@ describe.runIf(process.env.RIFFADO_TEST_FFMPEG === "1")(
                 "pipe:1",
             ]);
             const parts = [];
-            for await (const part of splitOpusSegments(original, 4))
+            for await (const part of splitOpusSegments(original, 10))
                 parts.push(part);
             expect(parts).toHaveLength(3);
             expect(parts.flatMap((part) => packets(part.buffer))).toEqual(
@@ -83,6 +83,32 @@ describe.runIf(process.env.RIFFADO_TEST_FFMPEG === "1")(
             expect(
                 parts.reduce((sum, part) => sum + part.buffer.length, 0),
             ).toBeLessThan(original.length * 1.2);
+        }, 30000);
+        it("drops a final Opus fragment under five seconds without re-encoding the remaining packets", async () => {
+            const original = await runFfmpeg(Buffer.alloc(0), [
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:sample_rate=48000",
+                "-t",
+                "16",
+                "-c:a",
+                "libopus",
+                "-f",
+                "ogg",
+                "pipe:1",
+            ]);
+            const parts = [];
+            for await (const part of splitOpusSegments(original, 6))
+                parts.push(part);
+            expect(parts).toHaveLength(2);
+            expect(parts.every((part) => part.durationSeconds >= 5)).toBe(true);
+            expect(parts.map((part) => part.count)).toEqual([2, 2]);
+            const kept = parts.flatMap((part) => packets(part.buffer));
+            expect(kept).toEqual(packets(original).slice(0, kept.length));
+            expect(kept.length).toBeLessThan(packets(original).length);
         }, 30000);
     },
 );

@@ -133,3 +133,25 @@ describe("generateTitleFromTranscription -- enhancement provider exclusion", () 
         expect(chatCompletionsCreate).not.toHaveBeenCalled();
     });
 });
+
+it("uses a text model for titles when the OpenAI default is an audio model", async () => {
+    mockUserSettings({ defaultTranscriptionLanguage: "fr" });
+    mockCredentials([
+        {
+            provider: "OpenAI",
+            apiKey: "enc",
+            defaultModel: "gpt-4o-transcribe-diarize",
+            isDefaultEnhancement: true,
+        },
+    ]);
+    expect(
+        await generateTitleFromTranscription(
+            "user-1",
+            "Réunion de préparation",
+        ),
+    ).toBe("Generated Title");
+    expect(chatCompletionsCreate.mock.calls[0][0].model).toBe("gpt-4o-mini");
+    expect(chatCompletionsCreate.mock.calls[0][0].messages[0].content).toMatch(
+        /French/i,
+    );
+});

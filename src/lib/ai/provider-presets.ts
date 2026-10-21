@@ -25,6 +25,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
         defaultModel: "whisper-1",
         transcriptionStyle: "whisper",
         knownTranscriptionModels: [
+            "gpt-transcribe",
             "whisper-1",
             "gpt-4o-transcribe",
             "gpt-4o-mini-transcribe",
@@ -79,15 +80,9 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
         name: "Google Gemini",
         baseUrl: "",
         placeholder: "AIza...",
-        defaultModel: "gemini-2.0-flash",
+        defaultModel: "gemini-3.8-flash",
         transcriptionStyle: "gemini",
-        knownTranscriptionModels: [
-            "gemini-2.0-flash",
-            "gemini-2.5-flash",
-            "gemini-2.5-pro",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
-        ],
+        knownTranscriptionModels: ["gemini-3.8-flash"],
     },
     {
         name: "ElevenLabs",

@@ -12,7 +12,11 @@ import { decryptText } from "@/lib/encryption/fields";
 import { isHostedLockedOut } from "@/lib/entitlements";
 import { AppError, ErrorCode } from "@/lib/errors";
 import { createUserStorageProvider } from "@/lib/storage/factory";
-import { type AudioJobView, isAudioJobActive } from "@/types/audio-processing";
+import {
+    type AudioJobView,
+    isAudioJobActive,
+    isUsableAudioPart,
+} from "@/types/audio-processing";
 
 export async function getAudioJob(
     userId: string,
@@ -38,8 +42,9 @@ export function audioJobView(job: AudioJob): AudioJobView {
         status: job.status,
         error: job.error,
         updatedAt: job.updatedAt.toISOString(),
-        parts: job.parts.map(
-            ({ encryptedText, storageKey: _key, ...part }) => ({
+        parts: job.parts
+            .filter(isUsableAudioPart)
+            .map(({ encryptedText, storageKey: _key, ...part }) => ({
                 ...part,
                 status:
                     job.status === "failed" && part.status === "transcribing"
@@ -53,8 +58,7 @@ export function audioJobView(job: AudioJob): AudioJobView {
                     encryptedText === undefined
                         ? undefined
                         : decryptText(encryptedText),
-            }),
-        ),
+            })),
     };
 }
 

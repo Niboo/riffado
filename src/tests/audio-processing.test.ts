@@ -1,3 +1,4 @@
+import { parseBuffer } from "music-metadata";
 import type { OpenAI } from "openai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AudioJob } from "@/db/queries/audio-jobs";
@@ -13,6 +14,8 @@ const mock = vi.hoisted(() => ({
     upload: vi.fn(),
     select: vi.fn(),
     transcribe: vi.fn(),
+    exists: vi.fn(),
+    deleteFile: vi.fn(),
 }));
 vi.mock("music-metadata", () => ({
     parseBuffer: vi.fn().mockResolvedValue({ format: { duration: 900 } }),
@@ -77,6 +80,8 @@ function job(): AudioJob {
 const storage = {
     uploadFile: mock.upload,
     downloadFile: mock.download,
+    exists: mock.exists,
+    deleteFile: mock.deleteFile,
 } as unknown as StorageProvider;
 const client = {
     audio: { transcriptions: { create: mock.create } },
@@ -93,6 +98,11 @@ const options = {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(parseBuffer).mockResolvedValue({
+        format: { duration: 900 },
+    } as Awaited<ReturnType<typeof parseBuffer>>);
+    mock.exists.mockResolvedValue(true);
+    mock.deleteFile.mockResolvedValue(undefined);
     mock.select.mockReturnValue({
         from: () => ({
             where: () => ({
@@ -123,6 +133,57 @@ beforeEach(() => {
 });
 
 describe("persistent audio preparation and transcription", () => {
+    it("discards newly generated parts below five seconds and keeps exactly five seconds", async () => {
+        const j = job();
+        vi.mocked(parseBuffer)
+            .mockResolvedValueOnce({ format: { duration: 5 } } as Awaited<
+                ReturnType<typeof parseBuffer>
+            >)
+            .mockResolvedValueOnce({ format: { duration: 4.999 } } as Awaited<
+                ReturnType<typeof parseBuffer>
+            >);
+        await prepareAudioParts(j, storage, options.audioBuffer, 10000);
+        expect(j.parts).toHaveLength(1);
+        expect(j.parts[0].endSeconds).toBe(5);
+        expect(mock.upload).toHaveBeenCalledTimes(1);
+    });
+    it("physically deletes short saved fragments before reusing a completed split", async () => {
+        const j = job();
+        j.parts = [
+            {
+                index: 0,
+                startSeconds: 0,
+                endSeconds: 900,
+                storageKey: "full.mp3",
+                bytes: 100,
+                status: "ready",
+            },
+            {
+                index: 1,
+                startSeconds: 900,
+                endSeconds: 900.1,
+                storageKey: "tail.mp3",
+                bytes: 5,
+                status: "ready",
+            },
+        ];
+        j.splitComplete = true;
+        await prepareAudioParts(j, storage, options.audioBuffer, 900100);
+        expect(mock.deleteFile).toHaveBeenCalledWith("tail.mp3");
+        expect(j.parts.map((part) => part.storageKey)).toEqual(["full.mp3"]);
+        expect(mock.segments).not.toHaveBeenCalled();
+    });
+    it("does not finish an empty split when all fragments are under five seconds", async () => {
+        vi.mocked(parseBuffer).mockResolvedValue({
+            format: { duration: 4.9 },
+        } as Awaited<ReturnType<typeof parseBuffer>>);
+        const j = job();
+        await expect(
+            prepareAudioParts(j, storage, options.audioBuffer, 9800),
+        ).rejects.toThrow("minimum duration of 5 seconds");
+        expect(mock.upload).not.toHaveBeenCalled();
+        expect(j.splitComplete).toBe(false);
+    });
     it("saves generated parts to durable storage before marking the split ready", async () => {
         const j = job();
         await prepareAudioParts(

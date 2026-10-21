@@ -8,6 +8,7 @@ import {
     transcodeToMp3Segments,
 } from "@/lib/transcription/ffmpeg";
 import { buildTranscriptionParams } from "@/lib/transcription/format";
+import { MIN_AUDIO_PART_SECONDS } from "@/types/audio-processing";
 
 // OpenAI currently rejects diarization chunks over 1,400 seconds. Leave a
 // margin for container timestamps and provider-side chunk boundary changes.
@@ -57,6 +58,8 @@ export async function transcribeOpenAIDiarized(
         timeoutMs,
     } = options;
     const durationSeconds = durationMs / 1000;
+    if (durationSeconds < MIN_AUDIO_PART_SECONDS)
+        throw new Error("Audio must be at least 5 seconds long");
     const chunkCount = Math.max(
         1,
         Math.ceil(durationSeconds / MAX_CHUNK_SECONDS),
@@ -72,6 +75,9 @@ export async function transcribeOpenAIDiarized(
         contentType: "audio/ogg" | "audio/mpeg" = "audio/mpeg",
     ) => {
         const file = buildPartFile(buffer, filename, index, count, contentType);
+        console.info(
+            `[audio-transcription] requesting part ${index + 1}/${count}; model=${model}; language=${language ?? "auto"}; format=${contentType}; bytes=${buffer.length}`,
+        );
         const response = await client.audio.transcriptions.create(
             buildTranscriptionParams({
                 file,
@@ -138,7 +144,12 @@ export async function transcribeOpenAIDiarized(
             audioBuffer,
             chunkDuration,
         )) {
-            await transcribeChunk(segment.buffer, segment.index, segment.count);
+            await transcribeChunk(
+                segment.buffer,
+                segment.index,
+                segment.count,
+                segment.startSeconds,
+            );
         }
     }
 
