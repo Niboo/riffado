@@ -128,16 +128,28 @@ export async function enqueueAudioJob(
             );
         if (existing && action === "split" && existing.splitComplete)
             return existing;
+        const resume =
+            action === "transcribe" &&
+            existing?.action === "transcribe" &&
+            existing.status === "failed" &&
+            !options.providerId &&
+            !options.model;
         let providerId =
-            options.providerId ?? existing?.providerId ?? undefined;
-        let model = options.model ?? existing?.model ?? undefined;
-        if (action === "transcribe" && !providerId) {
-            const [settings] = await tx
-                .select()
-                .from(userSettings)
-                .where(eq(userSettings.userId, userId))
-                .limit(1);
-            const pointer = settings?.defaultTranscriptionProviderId;
+            options.providerId ??
+            (resume ? (existing?.providerId ?? undefined) : undefined);
+        let model =
+            options.model ??
+            (resume ? (existing?.model ?? undefined) : undefined);
+        if (action === "transcribe") {
+            const [settings] = providerId
+                ? []
+                : await tx
+                      .select()
+                      .from(userSettings)
+                      .where(eq(userSettings.userId, userId))
+                      .limit(1);
+            const pointer =
+                providerId ?? settings?.defaultTranscriptionProviderId;
             const [credential] = await tx
                 .select()
                 .from(apiCredentials)
