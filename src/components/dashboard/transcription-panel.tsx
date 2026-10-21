@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { MeetingLanguageControl } from "@/components/dashboard/meeting-language-control";
+import { SpeakerNamesEditor } from "@/components/dashboard/speaker-names-editor";
 import { TranscribeInBrowserButton } from "@/components/dashboard/transcribe-in-browser-button";
 import {
     RichMarkdown,
@@ -96,9 +97,21 @@ export function TranscriptionPanel({
     const [activeSource, setActiveSource] = useState<string | undefined>(
         undefined,
     );
-    const activeTranscript =
+    const [renamedTranscript, setRenamedTranscript] = useState<{
+        key: string;
+        original: string;
+        text: string;
+    } | null>(null);
+    const selectedTranscript =
         transcriptList.find((t) => t.source === activeSource) ??
         transcriptList[0];
+    const transcriptKey = `${recording.id}:${selectedTranscript?.source}`;
+    const activeTranscript =
+        selectedTranscript &&
+        renamedTranscript?.key === transcriptKey &&
+        renamedTranscript.original === selectedTranscript.text
+            ? { ...selectedTranscript, text: renamedTranscript.text }
+            : selectedTranscript;
 
     const {
         summaryData,
@@ -130,6 +143,23 @@ export function TranscriptionPanel({
                                 disabled={isTranscribing || processingBusy}
                                 onPendingChange={setLanguagePending}
                             />
+                            {activeTranscript?.text && (
+                                <SpeakerNamesEditor
+                                    key={transcriptKey}
+                                    recordingId={recording.id}
+                                    source={activeTranscript.source}
+                                    text={activeTranscript.text}
+                                    disabled={actionDisabled}
+                                    onSaved={(text) => {
+                                        setRenamedTranscript({
+                                            key: transcriptKey,
+                                            original: selectedTranscript.text,
+                                            text,
+                                        });
+                                        onTranscribeComplete?.();
+                                    }}
+                                />
+                            )}
                             {activeTranscript?.text && (
                                 <Button
                                     size="sm"

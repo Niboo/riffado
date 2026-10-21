@@ -16,6 +16,7 @@ import { decryptText, encryptText } from "@/lib/encryption/fields";
 import { createUserStorageProvider } from "@/lib/storage/factory";
 import type { StorageProvider } from "@/lib/storage/types";
 import {
+    detectPauseCuts,
     isOggOpus,
     splitOpusSegments,
     transcodeToMp3Segments,
@@ -33,7 +34,7 @@ import {
     MIN_AUDIO_PART_SECONDS,
 } from "@/types/audio-processing";
 
-export const AUDIO_PART_SECONDS = 1199;
+export const AUDIO_PART_SECONDS = 600;
 
 export async function prepareAudioParts(
     job: AudioJob,
@@ -54,16 +55,16 @@ export async function prepareAudioParts(
     const seconds = durationMs / 1000;
     if (!Number.isFinite(seconds) || seconds <= 0)
         throw new Error("Invalid recording duration");
-    const partSeconds =
-        seconds / Math.max(1, Math.ceil(seconds / AUDIO_PART_SECONDS));
+    const partSeconds = AUDIO_PART_SECONDS;
+    const cuts = await detectPauseCuts(audio, seconds);
     await updateAudioJob(job, { status: "splitting" });
     const contentType: "audio/ogg" | "audio/mpeg" = opus
         ? "audio/ogg"
         : "audio/mpeg";
     const extension = opus ? "ogg" : "mp3";
     const segments = opus
-        ? splitOpusSegments(audio, partSeconds)
-        : transcodeToMp3Segments(audio, partSeconds);
+        ? splitOpusSegments(audio, partSeconds, cuts)
+        : transcodeToMp3Segments(audio, partSeconds, cuts);
     let sourceOffset = 0;
     for await (const segment of segments) {
         const metadata = await parseBuffer(segment.buffer, contentType, {
@@ -265,7 +266,7 @@ export async function processAudioJob(job: AudioJob): Promise<void> {
                     providerId: job.providerId ?? undefined,
                     model: job.model ?? undefined,
                     diarizationPersistence:
-                        recording.duration > 20 * 60 * 1000
+                        recording.duration > AUDIO_PART_SECONDS * 1000
                             ? persistentDiarization(job, storage)
                             : undefined,
                     assertActive: async () => {

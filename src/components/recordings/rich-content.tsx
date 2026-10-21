@@ -346,9 +346,10 @@ export function RichMarkdown({
 // `Capitalized:` pattern would misread an ordinary transcript line such as
 // `Question: ...` or `Action item: ...` as a speaker turn and wrongly switch a
 // non-diarized transcript out of its plain-text fallback.
-const SPEAKER_RE = /^(SPEAKER_\w+|Speaker\s+\w+|UNKNOWN):\s*(.*)$/;
+const SPEAKER_RE =
+    /^(SPEAKER_\w+|Speaker\s+\w+|UNKNOWN)(?: \(([^)]+)\))?:\s*(.*)$/;
 const TIMESTAMPED_SPEAKER_RE =
-    /^\[(\d{2}(?::\d{2}){1,2})\]\s+(Speaker\s+\w+)(\s+·\s+Part\s+\d+)?$/;
+    /^\[(\d{2}(?::\d{2}){1,2})\]\s+(Speaker\s+\w+)(?: \(([^)]+)\))?(\s+·\s+Part\s+\d+)?$/;
 
 const SPEAKER_COLORS = [
     "text-slate-700 dark:text-slate-300",
@@ -392,14 +393,14 @@ export function SpeakerTranscript({
         if (labeled) {
             turns.push({
                 speaker: labeled[1],
-                label: `${labeled[1]}:`,
-                text: labeled[2],
+                label: `${labeled[2] || labeled[1]}:`,
+                text: labeled[3],
             });
         } else if (timestamped) {
-            const part = timestamped[3] ?? "";
+            const part = timestamped[4] ?? "";
             turns.push({
                 speaker: timestamped[2],
-                label: `[${timestamped[1]}] ${timestamped[2]}${part ? ` (part ${part.match(/\d+/)?.[0]}, local label)` : ""}`,
+                label: `[${timestamped[1]}] ${timestamped[3] || timestamped[2]}${part ? ` (part ${part.match(/\d+/)?.[0]}, local label)` : ""}`,
                 text: "",
             });
         } else if (turns.length) {

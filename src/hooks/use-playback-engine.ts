@@ -82,7 +82,6 @@ export function usePlaybackEngine({
     useEffect(() => {
         if (!audioRef.current) return;
         const audio = audioRef.current;
-        const recordingId = recording.id;
 
         const updateTime = () => {
             if (!isSeekingRef.current) {
@@ -105,11 +104,10 @@ export function usePlaybackEngine({
             setCurrentTime(audio.currentTime);
         };
 
-        if (audio.src !== `/api/recordings/${recordingId}/audio`) {
-            audio.src = `/api/recordings/${recordingId}/audio`;
-            audio.load();
-        }
-
+        const handlePlay = () => setIsPlaying(true);
+        const handlePause = () => setIsPlaying(false);
+        audio.addEventListener("play", handlePlay);
+        audio.addEventListener("pause", handlePause);
         audio.addEventListener("timeupdate", updateTime);
         audio.addEventListener("loadedmetadata", updateDuration);
         audio.addEventListener("durationchange", updateDuration);
@@ -121,13 +119,15 @@ export function usePlaybackEngine({
         }
 
         return () => {
+            audio.removeEventListener("play", handlePlay);
+            audio.removeEventListener("pause", handlePause);
             audio.removeEventListener("timeupdate", updateTime);
             audio.removeEventListener("loadedmetadata", updateDuration);
             audio.removeEventListener("durationchange", updateDuration);
             audio.removeEventListener("ended", handleEnded);
             audio.removeEventListener("seeked", handleSeeked);
         };
-    }, [recording.id, autoPlayNext, onEnded]);
+    }, [autoPlayNext, onEnded]);
 
     const togglePlayPause = useCallback(() => {
         if (!audioRef.current) return;
@@ -137,6 +137,7 @@ export function usePlaybackEngine({
             audioRef.current.playbackRate = playbackSpeed;
             audioRef.current.play().catch((error) => {
                 console.error("Error playing audio:", error);
+                setIsPlaying(false);
                 toast.error("Failed to play audio");
             });
         }

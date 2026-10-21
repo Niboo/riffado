@@ -101,7 +101,7 @@ export function AudioPartsPanel({
     const completed =
         job?.parts.filter((p) => p.status === "completed").length ?? 0;
     const current = job?.parts.find((p) => p.status === "transcribing");
-    if (durationMs <= 20 * 60 * 1000) {
+    if (durationMs <= 10 * 60 * 1000) {
         return (
             <section
                 aria-label="Audio preparation"
@@ -147,7 +147,8 @@ export function AudioPartsPanel({
                         </InfoHint>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                        Up to 20 minutes per part. Hover or select for details.
+                        Around 10 minutes per part, cut near pauses. Hover or
+                        select for details.
                     </p>
                 </div>
                 {(!job ||

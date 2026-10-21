@@ -28,6 +28,7 @@ vi.mock("@/db/queries/audio-jobs", () => ({
     expireAudioJobs: vi.fn(),
 }));
 vi.mock("@/lib/transcription/ffmpeg", () => ({
+    detectPauseCuts: vi.fn().mockResolvedValue([600, 1200]),
     transcodeToMp3Segments: mock.segments,
     splitOpusSegments: mock.opusSegments,
     isOggOpus: (input: Buffer) =>
@@ -200,7 +201,8 @@ describe("persistent audio preparation and transcription", () => {
             status: "ready",
         });
         expect(mock.upload).toHaveBeenCalledTimes(2);
-        expect(mock.segments.mock.calls[0][1]).toBe(900);
+        expect(mock.segments.mock.calls[0][1]).toBe(600);
+        expect(mock.segments.mock.calls[0][2]).toEqual([600, 1200]);
     });
     it("retains already saved parts when a later upload fails, and retries only missing uploads", async () => {
         const j = job();

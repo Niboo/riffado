@@ -8,6 +8,7 @@ import { MIN_AUDIO_PART_SECONDS } from "@/types/audio-processing";
 export function runFfmpeg(
     input: Buffer,
     args: readonly string[],
+    captureStderr = false,
 ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
         const ff = spawn("ffmpeg", [...args], {
@@ -47,7 +48,7 @@ export function runFfmpeg(
                 return;
             }
             settled = true;
-            resolve(Buffer.concat(stdoutChunks));
+            resolve(Buffer.concat(captureStderr ? stderrChunks : stdoutChunks));
         });
 
         ff.stdin.on("error", (err) => {
@@ -96,6 +97,7 @@ export function transcodeToMp3(input: Buffer): Promise<Buffer> {
 export async function* transcodeToMp3Segments(
     input: Buffer,
     segmentSeconds: number,
+    cutTimes?: number[],
 ): AsyncGenerator<OpusAudioSegment> {
     const workDir = await mkdtemp(join(tmpdir(), "riffado-diarize-"));
     try {
@@ -105,8 +107,7 @@ export async function* transcodeToMp3Segments(
             ...mp3EncodingArgs(),
             "-f",
             "segment",
-            "-segment_time",
-            segmentSeconds.toFixed(3),
+            ...segmentTimingArgs(segmentSeconds, cutTimes),
             "-reset_timestamps",
             "1",
             outputPattern,
@@ -178,6 +179,7 @@ export function isOggOpus(input: Buffer): boolean {
 export async function* splitOpusSegments(
     input: Buffer,
     segmentSeconds: number,
+    cutTimes?: number[],
 ): AsyncGenerator<OpusAudioSegment> {
     if (!isOggOpus(input)) throw new Error("Expected an Ogg/Opus recording");
     if (!Number.isFinite(segmentSeconds) || segmentSeconds <= 0)
@@ -197,8 +199,7 @@ export async function* splitOpusSegments(
             "segment",
             "-segment_format",
             "ogg",
-            "-segment_time",
-            (segmentSeconds + 0.05).toFixed(3),
+            ...segmentTimingArgs(segmentSeconds + 0.05, cutTimes),
             "-reset_timestamps",
             "1",
             join(workDir, "part-%06d.ogg"),
@@ -258,4 +259,79 @@ async function eligibleSegments(
             "No audio part meets the minimum duration of 5 seconds",
         );
     return parts;
+}
+
+function segmentTimingArgs(seconds: number, cutTimes?: number[]): string[] {
+    return cutTimes?.length
+        ? ["-segment_times", cutTimes.map((time) => time.toFixed(3)).join(",")]
+        : ["-segment_time", seconds.toFixed(3)];
+}
+
+export function pauseCutTimes(
+    duration: number,
+    pauses: number[],
+    target = 600,
+): number[] {
+    if (
+        !Number.isFinite(duration) ||
+        duration <= 0 ||
+        !Number.isFinite(target) ||
+        target <= MIN_AUDIO_PART_SECONDS
+    )
+        throw new Error("Invalid recording duration");
+    const cuts: number[] = [];
+    let start = 0;
+    while (duration - start > target) {
+        const ideal = start + target;
+        const candidates = pauses.filter(
+            (pause) =>
+                Number.isFinite(pause) &&
+                pause - start >= MIN_AUDIO_PART_SECONDS &&
+                Math.abs(pause - ideal) <= 30 &&
+                duration - pause >= MIN_AUDIO_PART_SECONDS,
+        );
+        const cut =
+            candidates.sort(
+                (a, b) => Math.abs(a - ideal) - Math.abs(b - ideal) || a - b,
+            )[0] ?? Math.min(ideal, duration - MIN_AUDIO_PART_SECONDS);
+        cuts.push(cut);
+        start = cut;
+    }
+    return cuts;
+}
+
+export async function detectPauseCuts(
+    input: Buffer,
+    duration: number,
+): Promise<number[]> {
+    if (duration <= 600) return [];
+    const log = (
+        await runFfmpeg(
+            input,
+            [
+                "-hide_banner",
+                "-nostats",
+                "-i",
+                "pipe:0",
+                "-map",
+                "0:a:0",
+                "-af",
+                "silencedetect=noise=-35dB:d=0.4",
+                "-f",
+                "null",
+                "-",
+            ],
+            true,
+        )
+    ).toString("utf8");
+    const pauses: number[] = [];
+    let start: number | undefined;
+    for (const match of log.matchAll(/silence_(start|end): ([0-9.]+)/g)) {
+        if (match[1] === "start") start = Number(match[2]);
+        else if (start !== undefined) {
+            pauses.push((start + Number(match[2])) / 2);
+            start = undefined;
+        }
+    }
+    return pauseCutTimes(duration, pauses);
 }

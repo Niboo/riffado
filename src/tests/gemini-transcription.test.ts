@@ -110,6 +110,11 @@ it("sends saved Gemini parts separately, reuses completed text and persists each
     );
     expect(result.text).toContain("Part 1\n\nSpeaker 1: Déjà enregistré.");
     expect(result.text).toContain("Part 2");
+    const prompt = generateContent.mock.calls[0][0].contents[0].parts[0].text;
+    expect(prompt).toContain("Déjà enregistré.");
+    expect(prompt).toContain("tentative speaker continuity");
+    expect(prompt).toContain("Speaker UNKNOWN");
+    expect(prompt).toContain("language is fr");
 });
 it("keeps the first Gemini part saved when the next provider request fails", async () => {
     const save = vi.fn();

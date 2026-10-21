@@ -524,7 +524,7 @@ async function transcribeRecordingInner(
                     };
                     const result =
                         opts.diarizationPersistence &&
-                        recording.duration > 20 * 60 * 1000
+                        recording.duration > 10 * 60 * 1000
                             ? await geminiTranscribeParts({
                                   ...args,
                                   durationMs: recording.duration,
@@ -534,7 +534,7 @@ async function transcribeRecordingInner(
                                       model,
                                       defaultLanguage,
                                       diarize,
-                                      "gemini-parts-v1",
+                                      "gemini-parts-context-v2",
                                   ]),
                                   assertActive: opts.assertActive,
                               })

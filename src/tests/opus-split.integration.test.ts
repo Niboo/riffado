@@ -1,6 +1,10 @@
 import { parseBuffer } from "music-metadata";
 import { describe, expect, it } from "vitest";
-import { runFfmpeg, splitOpusSegments } from "@/lib/transcription/ffmpeg";
+import {
+    detectPauseCuts,
+    runFfmpeg,
+    splitOpusSegments,
+} from "@/lib/transcription/ffmpeg";
 
 function packets(ogg: Buffer): Buffer[] {
     const result: Buffer[] = [];
@@ -83,6 +87,35 @@ describe.runIf(process.env.RIFFADO_TEST_FFMPEG === "1")(
             expect(
                 parts.reduce((sum, part) => sum + part.buffer.length, 0),
             ).toBeLessThan(original.length * 1.2);
+        }, 30000);
+        it("detects a pause near ten minutes and copies Opus packets at that boundary", async () => {
+            const original = await runFfmpeg(Buffer.alloc(0), [
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "aevalsrc=if(between(t\\,595\\,605)\\,0\\,0.3*sin(2*PI*440*t)):s=16000",
+                "-t",
+                "670",
+                "-c:a",
+                "libopus",
+                "-f",
+                "ogg",
+                "pipe:1",
+            ]);
+            const cuts = await detectPauseCuts(original, 670);
+            expect(cuts).toHaveLength(1);
+            expect(cuts[0]).toBeGreaterThan(595);
+            expect(cuts[0]).toBeLessThan(605);
+            const parts = [];
+            for await (const part of splitOpusSegments(original, 600, cuts))
+                parts.push(part);
+            expect(parts).toHaveLength(2);
+            expect(parts[0].durationSeconds).toBeCloseTo(cuts[0], 0);
+            expect(parts.flatMap((part) => packets(part.buffer))).toEqual(
+                packets(original),
+            );
         }, 30000);
         it("drops a final Opus fragment under five seconds without re-encoding the remaining packets", async () => {
             const original = await runFfmpeg(Buffer.alloc(0), [
